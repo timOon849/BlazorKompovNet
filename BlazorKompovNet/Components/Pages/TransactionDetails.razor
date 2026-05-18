@@ -1,0 +1,180 @@
+@page "/transactions/{Id:int}"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IClubManagementService ClubManagementService
+
+<PageTitle>Транзакция</PageTitle>
+
+@if (transaction is null)
+{
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <h1>Транзакция</h1>
+            <p class="text-muted mb-0">Операция не найдена.</p>
+        </div>
+
+        <a class="btn btn-outline-secondary" href="/transactions">К списку</a>
+    </div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <h1>Транзакция #@transaction.Id</h1>
+            <p class="text-muted mb-0">@GetTransactionTypeText(transaction.Type)</p>
+        </div>
+
+        <div class="d-flex gap-2">
+            @if (transaction.GameSessionId is not null)
+            {
+                <a class="btn btn-outline-primary" href="@($"/sessions/{transaction.GameSessionId}")">Открыть сессию</a>
+            }
+            <a class="btn btn-outline-secondary" href="/transactions">К списку</a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card h-100 @(IsSessionCharge(transaction) ? "border-primary" : "border-success")">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Сумма</p>
+                    <h2 class="h3 mb-0 @(IsSessionCharge(transaction) ? "text-primary" : "text-success")">
+                        @FormatTransactionAmount(transaction)
+                    </h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Статус</p>
+                    <span class="badge @GetStatusBadgeClass(transaction.Status)">@GetStatusText(transaction.Status)</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Дата</p>
+                    <h2 class="h5 mb-0">@transaction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <h2 class="h5 mb-3">Подробности</h2>
+
+            <dl class="row mb-0">
+                <dt class="col-sm-4">Тип операции</dt>
+                <dd class="col-sm-8">@GetTransactionTypeText(transaction.Type)</dd>
+
+                <dt class="col-sm-4">Клиент</dt>
+                <dd class="col-sm-8">@GetClientName(transaction.Client)</dd>
+
+                <dt class="col-sm-4">Способ оплаты</dt>
+                <dd class="col-sm-8">@(transaction.PaymentType?.Name ?? "-")</dd>
+
+                <dt class="col-sm-4">Смена</dt>
+                <dd class="col-sm-8">@GetShiftText(transaction.CashierShift)</dd>
+
+                <dt class="col-sm-4">Игровая сессия</dt>
+                <dd class="col-sm-8">
+                    @if (transaction.GameSessionId is null)
+                    {
+                        <span>-</span>
+                    }
+                    else
+                    {
+                        <a href="@($"/sessions/{transaction.GameSessionId}")">Сессия #@transaction.GameSessionId</a>
+                    }
+                </dd>
+
+                <dt class="col-sm-4">Клуб</dt>
+                <dd class="col-sm-8">@(transaction.Club?.Name ?? "-")</dd>
+
+                <dt class="col-sm-4">Технический тип</dt>
+                <dd class="col-sm-8"><code>@transaction.Type</code></dd>
+            </dl>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Transaction? transaction;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        transaction = await ClubManagementService.GetTransactionAsync(Id);
+    }
+
+    private static bool IsSessionCharge(Transaction transaction)
+    {
+        return transaction.Type is "SessionStart" or "SessionExtension";
+    }
+
+    private static string GetClientName(Client? client)
+    {
+        return client is null ? "-" : $"{client.FirstName} {client.LastName}";
+    }
+
+    private static string GetShiftText(CashierShift? shift)
+    {
+        return shift is null
+            ? "-"
+            : $"{shift.Cashier?.FullName ?? "Кассир"} · {shift.OpenedAt:dd.MM.yyyy HH:mm}";
+    }
+
+    private static string GetTransactionTypeText(string type)
+    {
+        return type switch
+        {
+            "BalanceTopUp" => "Пополнение баланса",
+            "BonusAccrual" => "Бонусное пополнение",
+            "SessionStart" => "Старт сессии",
+            "SessionExtension" => "Продление сессии",
+            _ => type
+        };
+    }
+
+    private static string GetStatusText(PaymentStatus status)
+    {
+        return status switch
+        {
+            PaymentStatus.Pending => "Ожидает",
+            PaymentStatus.Paid => "Оплачено",
+            PaymentStatus.Refunded => "Возврат",
+            PaymentStatus.Cancelled => "Отменено",
+            _ => status.ToString()
+        };
+    }
+
+    private static string GetStatusBadgeClass(PaymentStatus status)
+    {
+        return status switch
+        {
+            PaymentStatus.Paid => "text-bg-success",
+            PaymentStatus.Pending => "text-bg-warning",
+            PaymentStatus.Refunded => "text-bg-info",
+            PaymentStatus.Cancelled => "text-bg-secondary",
+            _ => "text-bg-light"
+        };
+    }
+
+    private static string FormatTransactionAmount(Transaction transaction)
+    {
+        var prefix = IsSessionCharge(transaction) ? "-" : "+";
+        return $"{prefix}{FormatMoney(transaction.Amount)}";
+    }
+
+    private static string FormatMoney(decimal value)
+    {
+        return $"{value:N0} ₽";
+    }
+}

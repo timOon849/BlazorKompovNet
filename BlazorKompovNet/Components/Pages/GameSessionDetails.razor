@@ -1,0 +1,331 @@
+@page "/sessions/{Id:int}"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IClubManagementService ClubManagementService
+
+<PageTitle>Игровая сессия</PageTitle>
+
+@if (!string.IsNullOrWhiteSpace(notification))
+{
+    <div class="alert alert-info">@notification</div>
+}
+
+@if (session is null)
+{
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <h1>Игровая сессия</h1>
+            <p class="text-muted mb-0">Сессия не найдена.</p>
+        </div>
+
+        <a class="btn btn-outline-secondary" href="/sessions">К списку</a>
+    </div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <h1>Игровая сессия #@session.Id</h1>
+            <p class="text-muted mb-0">@GetClientName(session.Client) · @(session.Computer?.Name ?? "Компьютер")</p>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button class="btn btn-success"
+                    type="button"
+                    disabled="@(session.Status != "Active")"
+                    @onclick="OpenCompleteDialog">
+                Завершить
+            </button>
+            <a class="btn btn-outline-secondary" href="/sessions">К списку</a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card h-100 border-primary">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Стоимость</p>
+                    <h2 class="h3 mb-0">@FormatMoney(session.TotalPrice)</h2>
+                    <p class="small text-muted mb-0">Старт: @FormatMoney(session.InitialPrice)</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Статус</p>
+                    <span class="badge @GetSessionStatusBadgeClass(GetSessionDisplayStatus(session))">@GetSessionStatusText(GetSessionDisplayStatus(session))</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Время</p>
+                    <h2 class="h5 mb-0">@GetSessionTimeText(session)</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Сессия</h2>
+
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Начало</dt>
+                        <dd class="col-sm-7">@session.StartedAt.ToString("dd.MM.yyyy HH:mm")</dd>
+
+                        <dt class="col-sm-5">Плановое окончание</dt>
+                        <dd class="col-sm-7">@session.PlannedEndAt.ToString("dd.MM.yyyy HH:mm")</dd>
+
+                        <dt class="col-sm-5">Фактическое окончание</dt>
+                        <dd class="col-sm-7">@(session.EndedAt?.ToString("dd.MM.yyyy HH:mm") ?? "-")</dd>
+
+                        <dt class="col-sm-5">Тариф</dt>
+                        <dd class="col-sm-7">@(session.Tariff?.Name ?? "-")</dd>
+
+                        <dt class="col-sm-5">Зона тарифа</dt>
+                        <dd class="col-sm-7">@(session.TariffZone?.Zone?.Name ?? session.Computer?.Zone?.Name ?? "-")</dd>
+
+                        <dt class="col-sm-5">Смена</dt>
+                        <dd class="col-sm-7">@GetShiftText(session.CashierShift)</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Участники</h2>
+
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Клиент</dt>
+                        <dd class="col-sm-7">
+                            <strong>@GetClientName(session.Client)</strong>
+                            <div class="text-muted small">@GetClientContact(session.Client)</div>
+                        </dd>
+
+                        <dt class="col-sm-5">Компьютер</dt>
+                        <dd class="col-sm-7">
+                            <strong>@(session.Computer?.Name ?? "-")</strong>
+                            <div class="text-muted small">@(session.Computer?.GraphicsCard ?? "-"), @(session.Computer?.RamGb.ToString() ?? "-") ГБ RAM</div>
+                        </dd>
+
+                        <dt class="col-sm-5">Зал</dt>
+                        <dd class="col-sm-7">@(session.Computer?.Zone?.Name ?? "-")</dd>
+
+                        <dt class="col-sm-5">Баланс клиента</dt>
+                        <dd class="col-sm-7">@(session.Client is null ? "-" : FormatMoney(session.Client.Balance))</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (session.Transactions.Any())
+    {
+        <div class="card mt-3">
+            <div class="card-body">
+                <h2 class="h5 mb-3">Связанные транзакции</h2>
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Тип</th>
+                                <th>Способ</th>
+                                <th class="text-end">Сумма</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var transaction in session.Transactions.OrderByDescending(transaction => transaction.CreatedAt))
+                            {
+                                <tr>
+                                    <td>@transaction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                    <td>@GetTransactionTypeText(transaction.Type)</td>
+                                    <td>@(transaction.PaymentType?.Name ?? "-")</td>
+                                    <td class="text-end">@FormatMoney(transaction.Amount)</td>
+                                    <td class="text-end">
+                                        <a class="btn btn-sm btn-outline-primary" href="@($"/transactions/{transaction.Id}")">Открыть</a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@if (showCompleteDialog && session is not null)
+{
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, .45);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5">Завершить сессию #@session.Id?</h2>
+                    <button type="button" class="btn-close" aria-label="Закрыть" @onclick="CloseCompleteDialog"></button>
+                </div>
+
+                <div class="modal-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Клиент</dt>
+                        <dd class="col-sm-8">@GetClientName(session.Client)</dd>
+
+                        <dt class="col-sm-4">Компьютер</dt>
+                        <dd class="col-sm-8">@(session.Computer?.Name ?? "-")</dd>
+
+                        <dt class="col-sm-4">Стоимость</dt>
+                        <dd class="col-sm-8">@FormatMoney(session.TotalPrice)</dd>
+
+                        <dt class="col-sm-4">Факт</dt>
+                        <dd class="col-sm-8">@DateTime.Now.ToString("dd.MM.yyyy HH:mm")</dd>
+                    </dl>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseCompleteDialog">Отмена</button>
+                    <button type="button" class="btn btn-success" @onclick="CompleteSessionAsync">Завершить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private GameSession? session;
+    private string? notification;
+    private bool showCompleteDialog;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadSessionAsync();
+    }
+
+    private async Task LoadSessionAsync()
+    {
+        session = await ClubManagementService.GetSessionAsync(Id);
+    }
+
+    private void OpenCompleteDialog()
+    {
+        showCompleteDialog = true;
+    }
+
+    private void CloseCompleteDialog()
+    {
+        showCompleteDialog = false;
+    }
+
+    private async Task CompleteSessionAsync()
+    {
+        if (session is null)
+        {
+            return;
+        }
+
+        var result = await ClubManagementService.CompleteSessionAsync(session.Id);
+        notification = result.Message;
+        CloseCompleteDialog();
+        await LoadSessionAsync();
+    }
+
+    private static string GetClientName(Client? client)
+    {
+        return client is null ? "-" : $"{client.FirstName} {client.LastName}";
+    }
+
+    private static string GetClientContact(Client? client)
+    {
+        if (client is null)
+        {
+            return "-";
+        }
+
+        return string.Join(" · ", new[] { client.PhoneNumber, client.Email }
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    private static string GetShiftText(CashierShift? shift)
+    {
+        return shift is null
+            ? "-"
+            : $"{shift.Cashier?.FullName ?? "Кассир"} · {shift.OpenedAt:dd.MM.yyyy HH:mm}";
+    }
+
+    private static string GetSessionTimeText(GameSession session)
+    {
+        if (session.EndedAt is not null)
+        {
+            return $"Завершена {session.EndedAt:dd.MM.yyyy HH:mm}";
+        }
+
+        var remaining = session.PlannedEndAt - DateTime.Now;
+        return remaining <= TimeSpan.Zero
+            ? "Время истекло"
+            : $"Осталось {FormatDuration(remaining)}";
+    }
+
+    private static string GetSessionDisplayStatus(GameSession session)
+    {
+        return session.Status == "Active" && session.PlannedEndAt < DateTime.Now
+            ? "Overdue"
+            : session.Status;
+    }
+
+    private static string GetSessionStatusText(string status)
+    {
+        return status switch
+        {
+            "Active" => "Активна",
+            "Overdue" => "Просрочена",
+            "Completed" => "Завершена",
+            _ => status
+        };
+    }
+
+    private static string GetSessionStatusBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Active" => "text-bg-primary",
+            "Overdue" => "text-bg-warning",
+            "Completed" => "text-bg-success",
+            _ => "text-bg-secondary"
+        };
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        return duration.TotalHours >= 1
+            ? $"{(int)duration.TotalHours} ч {duration.Minutes} мин"
+            : $"{duration.Minutes} мин";
+    }
+
+    private static string FormatMoney(decimal value)
+    {
+        return $"{value:N0} ₽";
+    }
+
+    private static string GetTransactionTypeText(string type)
+    {
+        return type switch
+        {
+            "SessionStart" => "Старт сессии",
+            "SessionExtension" => "Продление сессии",
+            _ => type
+        };
+    }
+}

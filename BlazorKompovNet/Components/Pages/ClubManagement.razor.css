@@ -1,0 +1,136 @@
+.computer-status-card {
+    border-left: 0.35rem solid transparent;
+}
+
+.computer-status-card.status-available {
+    border-left-color: var(--bs-success);
+}
+
+.computer-status-card.status-busy {
+    border-left-color: var(--bs-primary);
+}
+
+.computer-status-card.status-reserved {
+    border-left-color: var(--bs-warning);
+}
+
+.computer-status-card.status-maintenance {
+    border-left-color: var(--bs-danger);
+}
+
+.computer-status-card.status-disabled {
+    border-left-color: var(--bs-secondary);
+}
+
+.computer-row {
+    border-left: 0.35rem solid transparent;
+}
+
+.computer-row.row-available {
+    border-left-color: var(--bs-success);
+}
+
+.computer-row.row-busy {
+    border-left-color: var(--bs-primary);
+}
+
+.computer-row.row-reserved {
+    border-left-color: var(--bs-warning);
+}
+
+.computer-row.row-maintenance,
+.computer-row.row-overdue {
+    border-left-color: var(--bs-danger);
+}
+
+.computer-row.row-disabled {
+    border-left-color: var(--bs-secondary);
+    opacity: 0.72;
+}
+
+.pc-status-indicator {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    flex: 0 0 1rem;
+    box-shadow: 0 0 0 0.25rem rgba(108, 117, 125, 0.12);
+}
+
+.pc-status-indicator.indicator-available {
+    background-color: var(--bs-success);
+}
+
+.pc-status-indicator.indicator-busy {
+    background-color: var(--bs-primary);
+}
+
+.pc-status-indicator.indicator-reserved {
+    background-color: var(--bs-warning);
+}
+
+.pc-status-indicator.indicator-maintenance,
+.pc-status-indicator.indicator-overdue {
+    background-color: var(--bs-danger);
+}
+
+.pc-status-indicator.indicator-disabled,
+.pc-status-indicator.indicator-unknown {
+    background-color: var(--bs-secondary);
+}
+
+.pc-status-indicator.indicator-busy,
+.pc-status-indicator.indicator-overdue {
+    animation: pulse 1.8s ease-in-out infinite;
+}
+
+.session-progress {
+    height: 0.35rem;
+}
+
+.club-computers-table {
+    table-layout: fixed;
+    min-width: 1080px;
+}
+
+.club-computers-table__computer {
+    width: 20%;
+}
+
+.club-computers-table__status {
+    width: 18%;
+}
+
+.club-computers-table__specs {
+    width: 20%;
+}
+
+.club-computers-table__session {
+    width: 22%;
+}
+
+.club-computers-table__end {
+    width: 12%;
+}
+
+.club-computers-table__extensions {
+    width: 8%;
+}
+
+.club-computers-table th,
+.club-computers-table td {
+    overflow-wrap: anywhere;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.35);
+    }
+
+    70% {
+        box-shadow: 0 0 0 0.45rem rgba(13, 110, 253, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(13, 110, 253, 0);
+    }
+}

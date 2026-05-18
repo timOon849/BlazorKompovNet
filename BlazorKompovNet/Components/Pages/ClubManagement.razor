@@ -1,0 +1,991 @@
+@page "/club-management"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IClubManagementService ClubManagementService
+
+<PageTitle>Управление клубом</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1>Управление клубом</h1>
+        <p class="text-muted mb-0">Зоны, компьютеры, игровые сессии и посетители клуба.</p>
+    </div>
+
+    <div class="d-flex gap-2">
+        <button class="btn btn-success" type="button" disabled="@(!HasOpenShift)" @onclick="OpenTopUpDialog">Пополнить баланс</button>
+        <button class="btn btn-outline-primary" type="button" @onclick="LoadDataAsync">Обновить</button>
+    </div>
+</div>
+
+@if (!HasOpenShift)
+{
+    <div class="alert alert-warning">
+        Открытой кассовой смены нет. Откройте смену на панели управления или странице кассовых смен, чтобы запускать сессии, продлевать их и пополнять баланс.
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(notification))
+{
+    <div class="alert alert-info">@notification</div>
+}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl">
+        <div class="card h-100 computer-status-card status-available">
+            <div class="card-body">
+                <p class="text-muted mb-1">Свободны</p>
+                <h2 class="h3 mb-0">@CountComputers(ComputerStatusCodes.Available)</h2>
+                <p class="small text-muted mb-0">Можно запускать сессии</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl">
+        <div class="card h-100 computer-status-card status-busy">
+            <div class="card-body">
+                <p class="text-muted mb-1">Заняты</p>
+                <h2 class="h3 mb-0">@CountComputers(ComputerStatusCodes.Busy)</h2>
+                <p class="small text-muted mb-0">Идет игровая сессия</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl">
+        <div class="card h-100 computer-status-card status-reserved">
+            <div class="card-body">
+                <p class="text-muted mb-1">Бронь</p>
+                <h2 class="h3 mb-0">@CountComputers(ComputerStatusCodes.Reserved)</h2>
+                <p class="small text-muted mb-0">Ожидают гостя</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl">
+        <div class="card h-100 computer-status-card status-maintenance">
+            <div class="card-body">
+                <p class="text-muted mb-1">Ремонт</p>
+                <h2 class="h3 mb-0">@CountComputers(ComputerStatusCodes.Maintenance)</h2>
+                <p class="small text-muted mb-0">Недоступны</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl">
+        <div class="card h-100 computer-status-card status-disabled">
+            <div class="card-body">
+                <p class="text-muted mb-1">Выключены</p>
+                <h2 class="h3 mb-0">@CountComputers(ComputerStatusCodes.Disabled)</h2>
+                <p class="small text-muted mb-0">Можно включить</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<section class="mb-5">
+    <h2 class="h4 mb-3">Зоны и компьютеры</h2>
+
+    @foreach (var zone in zones)
+    {
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>@zone.Name</strong>
+                        <span class="text-muted ms-2">@zone.Description</span>
+                    </div>
+                    <span class="badge text-bg-secondary">@zone.Computers.Count ПК</span>
+                </div>
+
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 club-computers-table">
+                            <colgroup>
+                                <col class="club-computers-table__computer" />
+                                <col class="club-computers-table__status" />
+                                <col class="club-computers-table__specs" />
+                                <col class="club-computers-table__session" />
+                                <col class="club-computers-table__end" />
+                                <col class="club-computers-table__extensions" />
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th>Компьютер</th>
+                                    <th>Статус</th>
+                                    <th>Характеристики</th>
+                                    <th>Активная сессия</th>
+                                    <th>Окончание</th>
+                                    <th>Продления</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var computer in zone.Computers)
+                                {
+                                    var session = GetActiveSession(computer.Id);
+                                    var booking = GetActiveBooking(computer.Id);
+
+                                    <tr class="@GetComputerRowClass(computer, session)"
+                                        style="cursor: context-menu;"
+                                        title="Нажмите правой кнопкой мыши для действий"
+                                        @oncontextmenu="(args) => OpenComputerMenu(args, computer)"
+                                        @oncontextmenu:preventDefault="true">
+                                        <td>
+                                            <div class="d-flex align-items-center gap-3">
+                                                <span class="pc-status-indicator @GetComputerIndicatorClass(computer, session)" aria-hidden="true"></span>
+                                                <div>
+                                                    <strong>@computer.Name</strong>
+                                                    <div class="text-muted small">@computer.Number</div>
+                                                    <div class="small @GetComputerStateTextClass(computer, session)">
+                                                        @GetComputerStateText(computer, session)
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="d-flex flex-column gap-1">
+                                                <span><span class="badge @GetStatusBadgeClass(computer.Status)">@GetStatusText(computer.Status)</span></span>
+                                                <span class="small text-muted">@GetComputerActionHint(computer, session)</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div>@computer.GraphicsCard, @computer.RamGb ГБ RAM</div>
+                                            <div class="text-muted small">@computer.Monitor</div>
+                                        </td>
+                                        <td>
+                                            @if (session is null)
+                                            {
+                                                <span class="text-muted">Нет</span>
+                                                @if (booking is not null)
+                                                {
+                                                    <div class="small text-warning-emphasis">
+                                                        Бронь: @GetClientName(booking.Client), @booking.StartsAt.ToString("HH:mm")-@booking.EndsAt.ToString("HH:mm")
+                                                    </div>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <span>@session.Client?.FirstName @session.Client?.LastName, @session.Tariff?.Name</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (session is null)
+                                            {
+                                                <span>-</span>
+                                            }
+                                            else
+                                            {
+                                                <div class="d-flex justify-content-between gap-2">
+                                                    <span>@session.PlannedEndAt.ToString("HH:mm")</span>
+                                                    <span class="@GetSessionTimeTextClass(session)">@GetSessionTimeLeftText(session)</span>
+                                                </div>
+                                                <div class="progress session-progress mt-1" role="progressbar" aria-label="Время сессии">
+                                                    <div class="progress-bar @GetSessionProgressClass(session)" style="width: @(GetSessionProgressPercent(session))%"></div>
+                                                </div>
+                                            }
+                                        </td>
+                                        <td>@(session is null ? "-" : FormatMoney(session.TotalPrice - session.InitialPrice))</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+    }
+</section>
+
+@if (showComputerMenu && contextMenuComputer is not null)
+{
+    <div class="list-group shadow"
+         style="position: fixed; left: @(contextMenuX)px; top: @(contextMenuY)px; z-index: 1050; min-width: 220px;">
+        <button class="list-group-item list-group-item-action"
+                type="button"
+                disabled="@(!CanStartSession(contextMenuComputer))"
+                @onclick="() => OpenStartSessionDialog(contextMenuComputer)">
+            Начать сессию
+        </button>
+        <button class="list-group-item list-group-item-action"
+                type="button"
+                disabled="@(GetActiveSession(contextMenuComputer.Id) is null)"
+                @onclick="() => OpenExtendSessionDialog(contextMenuComputer)">
+            Продлить по тарифу
+        </button>
+        <button class="list-group-item list-group-item-action"
+                type="button"
+                disabled="@(GetActiveSession(contextMenuComputer.Id) is null)"
+                @onclick="() => OpenAddTimeDialog(contextMenuComputer)">
+            Добавить время с причиной
+        </button>
+        <button class="list-group-item list-group-item-action"
+                type="button"
+                disabled="@(contextMenuComputer.Status?.Code != ComputerStatusCodes.Disabled)"
+                @onclick="() => TurnOnComputerAsync(contextMenuComputer.Id)">
+            Включить
+        </button>
+        <button class="list-group-item list-group-item-action"
+                type="button"
+                disabled="@(contextMenuComputer.Status?.Code == ComputerStatusCodes.Disabled)"
+                @onclick="() => RestartComputerAsync(contextMenuComputer.Id)">
+            Перезагрузить
+        </button>
+        <button class="list-group-item list-group-item-action text-danger"
+                type="button"
+                @onclick="() => TurnOffComputerAsync(contextMenuComputer.Id)">
+            Выключить
+        </button>
+        <button class="list-group-item list-group-item-action text-muted" type="button" @onclick="CloseComputerMenu">
+            Закрыть
+        </button>
+    </div>
+}
+
+@if (showStartSessionDialog && selectedComputer is not null)
+{
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, .45);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5">Начать сессию: @selectedComputer.Name</h2>
+                    <button type="button" class="btn-close" aria-label="Закрыть" @onclick="CloseStartSessionDialog"></button>
+                </div>
+
+                <div class="modal-body">
+                    @if (SelectedComputerBooking is not null)
+                    {
+                        <div class="alert alert-warning">
+                            Клиент из брони уже выбран: <strong>@GetClientName(SelectedComputerBooking.Client)</strong>.
+                            Бронь действует @SelectedComputerBooking.StartsAt.ToString("HH:mm")-@SelectedComputerBooking.EndsAt.ToString("HH:mm").
+                        </div>
+                    }
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="sessionClient">Клиент</label>
+                            <select class="form-select" id="sessionClient" @bind="selectedClientId">
+                                @foreach (var client in clients)
+                                {
+                                    <option value="@client.Id">@client.FirstName @client.LastName (@FormatMoney(client.Balance))</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="sessionTariff">Тариф</label>
+                            <select class="form-select" id="sessionTariff" @bind="selectedTariffId">
+                                @foreach (var tariff in tariffs)
+                                {
+                                    <option value="@tariff.Id">@tariff.Name - @FormatMoney(GetTariffPrice(tariff, selectedComputer.ZoneId))</option>
+                                }
+                            </select>
+                        </div>
+
+                        @if (SelectedTariff?.IsHourly == true)
+                        {
+                            <div class="col-md-6">
+                                <label class="form-label" for="sessionHours">Количество часов</label>
+                                <input class="form-control" id="sessionHours" type="number" min="0.5" step="0.5" @bind="sessionHours" />
+                            </div>
+                        }
+
+                        <div class="col-md-6">
+                            <label class="form-label">Итого</label>
+                            <div class="form-control bg-light">@FormatMoney(CalculateSessionPrice())</div>
+                        </div>
+                    </div>
+
+                    @if (SelectedClientHasActiveSession)
+                    {
+                        <div class="alert alert-warning mt-3 mb-0">
+                            Этот посетитель уже находится за другим компьютером.
+                        </div>
+                    }
+                    else if (SelectedClientHasInsufficientBalance)
+                    {
+                        <div class="alert alert-warning mt-3 mb-0">
+                            На балансе посетителя недостаточно средств для выбранной сессии.
+                        </div>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseStartSessionDialog">Отмена</button>
+                    <button type="button" class="btn btn-primary" disabled="@(!CanSubmitSelectedSession)" @onclick="StartSessionAsync">Начать сессию</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showTopUpDialog)
+{
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, .45);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5">Пополнение баланса гостя</h2>
+                    <button type="button" class="btn-close" aria-label="Закрыть" @onclick="CloseTopUpDialog"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="input-group mb-3">
+                        <input class="form-control"
+                               placeholder="Телефон, имя или фамилия"
+                               @bind="topUpSearchText"
+                               @bind:event="oninput" />
+                        <button class="btn btn-outline-secondary" type="button" @onclick="SearchTopUpClientsAsync">Найти</button>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="topUpMethod">Тип пополнения</label>
+                            <select class="form-select" id="topUpMethod" @bind="selectedPaymentTypeId">
+                                @foreach (var paymentType in paymentTypes)
+                                {
+                                    <option value="@paymentType.Id">@paymentType.Name</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Гость</th>
+                                    <th>Контакты</th>
+                                    <th>Баланс</th>
+                                    <th style="width: 220px;">Сумма</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var client in topUpClients)
+                                {
+                                    <tr class="@(selectedTopUpClientId == client.Id ? "table-primary" : null)"
+                                        style="cursor: pointer;"
+                                        @onclick="() => SelectTopUpClient(client)">
+                                        <td>@client.FirstName @client.LastName</td>
+                                        <td>
+                                            <div>@client.PhoneNumber</div>
+                                            <div class="text-muted small">@client.Email</div>
+                                        </td>
+                                        <td>@FormatMoney(client.Balance)</td>
+                                        <td>
+                                            @if (selectedTopUpClientId == client.Id)
+                                            {
+                                                <input class="form-control form-control-sm" type="number" min="1" step="50" @bind="topUpAmount" @onclick:stopPropagation="true" />
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @if (topUpClients.Count == 0)
+                    {
+                        <p class="text-muted mb-0">Гости не найдены. Введите телефон, имя или фамилию.</p>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseTopUpDialog">Отмена</button>
+                    <button type="button" class="btn btn-success" disabled="@(!CanSubmitTopUp)" @onclick="SubmitTopUpAsync">Пополнить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showExtendSessionDialog && selectedSession is not null)
+{
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, .45);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5">Продлить сеанс: @selectedSession.Computer?.Name</h2>
+                    <button type="button" class="btn-close" aria-label="Закрыть" @onclick="CloseExtendSessionDialog"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="extendTariff">Тариф</label>
+                            <select class="form-select" id="extendTariff" @bind="extendTariffId">
+                                @foreach (var tariff in tariffs)
+                                {
+                                    <option value="@tariff.Id">@tariff.Name - @FormatMoney(GetTariffPrice(tariff, selectedSession.Computer?.ZoneId ?? 0))</option>
+                                }
+                            </select>
+                        </div>
+
+                        @if (SelectedExtendTariff?.IsHourly == true)
+                        {
+                            <div class="col-md-6">
+                                <label class="form-label" for="extendHours">Количество часов</label>
+                                <input class="form-control" id="extendHours" type="number" min="0.5" step="0.5" @bind="extendHours" />
+                            </div>
+                        }
+
+                        <div class="col-md-6">
+                            <label class="form-label">Клиент</label>
+                            <div class="form-control bg-light">@selectedSession.Client?.FirstName @selectedSession.Client?.LastName</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Стоимость продления</label>
+                            <div class="form-control bg-light">@FormatMoney(CalculateExtendPrice())</div>
+                        </div>
+                    </div>
+
+                    @if (SelectedSessionClientHasInsufficientBalance)
+                    {
+                        <div class="alert alert-warning mt-3 mb-0">
+                            На балансе посетителя недостаточно средств для продления.
+                        </div>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseExtendSessionDialog">Отмена</button>
+                    <button type="button" class="btn btn-primary" disabled="@(!CanSubmitExtendSession)" @onclick="ExtendSessionAsync">Продлить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showAddTimeDialog && selectedSession is not null)
+{
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, .45);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5">Добавить время: @selectedSession.Computer?.Name</h2>
+                    <button type="button" class="btn-close" aria-label="Закрыть" @onclick="CloseAddTimeDialog"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="manualHours">Количество часов</label>
+                        <input class="form-control" id="manualHours" type="number" min="0.5" step="0.5" @bind="manualHours" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="manualReason">Причина</label>
+                        <textarea class="form-control" id="manualReason" rows="3" @bind="manualReason"></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseAddTimeDialog">Отмена</button>
+                    <button type="button" class="btn btn-primary" disabled="@(!CanSubmitManualTime)" @onclick="AddManualTimeAsync">Добавить время</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<ComputerZone> zones = [];
+    private IReadOnlyList<Client> clients = [];
+    private IReadOnlyList<Client> topUpClients = [];
+    private IReadOnlyList<Tariff> tariffs = [];
+    private IReadOnlyList<PaymentType> paymentTypes = [];
+    private IReadOnlyList<GameSession> activeSessions = [];
+    private IReadOnlyList<Booking> activeBookings = [];
+    private CashierShift? currentShift;
+    private string? notification;
+
+    private string? topUpSearchText;
+    private int selectedTopUpClientId;
+    private decimal topUpAmount = 500;
+    private int selectedPaymentTypeId;
+
+    private bool showStartSessionDialog;
+    private bool showTopUpDialog;
+    private Computer? selectedComputer;
+    private int selectedClientId;
+    private int selectedTariffId;
+    private decimal sessionHours = 1;
+    private bool showExtendSessionDialog;
+    private bool showAddTimeDialog;
+    private GameSession? selectedSession;
+    private int extendTariffId;
+    private decimal extendHours = 1;
+    private decimal manualHours = 1;
+    private string manualReason = string.Empty;
+    private bool showComputerMenu;
+    private Computer? contextMenuComputer;
+    private double contextMenuX;
+    private double contextMenuY;
+
+    private Tariff? SelectedTariff => tariffs.FirstOrDefault(tariff => tariff.Id == selectedTariffId);
+    private Tariff? SelectedExtendTariff => tariffs.FirstOrDefault(tariff => tariff.Id == extendTariffId);
+    private Client? SelectedClient => clients.FirstOrDefault(client => client.Id == selectedClientId);
+    private Client? SelectedSessionClient => clients.FirstOrDefault(client => client.Id == selectedSession?.ClientId);
+    private Booking? SelectedComputerBooking => selectedComputer is null ? null : GetActiveBooking(selectedComputer.Id);
+    private bool SelectedClientHasActiveSession => activeSessions.Any(session => session.ClientId == selectedClientId);
+    private bool SelectedClientHasInsufficientBalance => SelectedClient is not null && SelectedClient.Balance < CalculateSessionPrice();
+    private bool SelectedSessionClientHasInsufficientBalance => SelectedSessionClient is not null && SelectedSessionClient.Balance < CalculateExtendPrice();
+    private bool HasOpenShift => currentShift is not null;
+    private bool CanSubmitSelectedSession =>
+        HasOpenShift &&
+        selectedComputer is not null &&
+        SelectedClient is not null &&
+        selectedClientId != 0 &&
+        selectedTariffId != 0 &&
+        !SelectedClientHasActiveSession &&
+        !SelectedClientHasInsufficientBalance;
+    private bool CanSubmitExtendSession =>
+        HasOpenShift &&
+        selectedSession is not null &&
+        extendTariffId != 0 &&
+        SelectedSessionClient is not null &&
+        !SelectedSessionClientHasInsufficientBalance;
+    private bool CanSubmitManualTime =>
+        selectedSession is not null &&
+        manualHours > 0 &&
+        !string.IsNullOrWhiteSpace(manualReason);
+    private bool CanSubmitTopUp =>
+        HasOpenShift &&
+        selectedTopUpClientId != 0 &&
+        topUpAmount > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        zones = await ClubManagementService.GetZonesAsync();
+        tariffs = await ClubManagementService.GetTariffsAsync();
+        paymentTypes = await ClubManagementService.GetPaymentTypesAsync();
+        activeSessions = await ClubManagementService.GetActiveSessionsAsync();
+        activeBookings = await ClubManagementService.GetActiveBookingsAsync();
+        currentShift = await ClubManagementService.GetCurrentShiftAsync();
+        clients = await ClubManagementService.SearchClientsAsync(null);
+
+        selectedClientId = selectedClientId == 0 ? clients.FirstOrDefault()?.Id ?? 0 : selectedClientId;
+        selectedTariffId = selectedTariffId == 0 ? tariffs.FirstOrDefault()?.Id ?? 0 : selectedTariffId;
+        selectedPaymentTypeId = selectedPaymentTypeId == 0 ? paymentTypes.FirstOrDefault()?.Id ?? 0 : selectedPaymentTypeId;
+    }
+
+    private async Task OpenTopUpDialog()
+    {
+        if (!HasOpenShift)
+        {
+            notification = "Откройте кассовую смену перед пополнением баланса.";
+            return;
+        }
+
+        showTopUpDialog = true;
+        topUpSearchText = string.Empty;
+        selectedTopUpClientId = 0;
+        topUpAmount = 500;
+        selectedPaymentTypeId = paymentTypes.FirstOrDefault()?.Id ?? 0;
+        topUpClients = await ClubManagementService.SearchClientsAsync(null);
+    }
+
+    private void CloseTopUpDialog()
+    {
+        showTopUpDialog = false;
+        selectedTopUpClientId = 0;
+    }
+
+    private async Task SearchTopUpClientsAsync()
+    {
+        topUpClients = await ClubManagementService.SearchClientsAsync(topUpSearchText);
+        selectedTopUpClientId = topUpClients.Any(client => client.Id == selectedTopUpClientId)
+            ? selectedTopUpClientId
+            : 0;
+    }
+
+    private void SelectTopUpClient(Client client)
+    {
+        selectedTopUpClientId = client.Id;
+    }
+
+    private async Task SubmitTopUpAsync()
+    {
+        if (!CanSubmitTopUp)
+        {
+            notification = "Выберите гостя и укажите сумму пополнения.";
+            return;
+        }
+
+        var result = await ClubManagementService.TopUpClientBalanceAsync(selectedTopUpClientId, topUpAmount, selectedPaymentTypeId);
+        notification = result.Succeeded
+            ? $"Баланс посетителя пополнен. Тип: {paymentTypes.FirstOrDefault(paymentType => paymentType.Id == selectedPaymentTypeId)?.Name}."
+            : result.Message;
+
+        if (result.Succeeded)
+        {
+            CloseTopUpDialog();
+        }
+
+        await LoadDataAsync();
+    }
+
+    private void OpenStartSessionDialog(Computer computer)
+    {
+        CloseComputerMenu();
+        if (!HasOpenShift)
+        {
+            notification = "Откройте кассовую смену перед запуском сессии.";
+            return;
+        }
+
+        selectedComputer = computer;
+        selectedClientId = GetActiveBooking(computer.Id)?.ClientId ?? clients.FirstOrDefault()?.Id ?? 0;
+        selectedTariffId = tariffs.FirstOrDefault()?.Id ?? 0;
+        sessionHours = 1;
+        showStartSessionDialog = true;
+    }
+
+    private void CloseStartSessionDialog()
+    {
+        showStartSessionDialog = false;
+        selectedComputer = null;
+    }
+
+    private void OpenExtendSessionDialog(Computer computer)
+    {
+        CloseComputerMenu();
+        if (!HasOpenShift)
+        {
+            notification = "Откройте кассовую смену перед продлением сессии.";
+            return;
+        }
+
+        selectedSession = GetActiveSession(computer.Id);
+        extendTariffId = tariffs.FirstOrDefault()?.Id ?? 0;
+        extendHours = 1;
+        showExtendSessionDialog = selectedSession is not null;
+    }
+
+    private void CloseExtendSessionDialog()
+    {
+        showExtendSessionDialog = false;
+        selectedSession = null;
+    }
+
+    private void OpenAddTimeDialog(Computer computer)
+    {
+        CloseComputerMenu();
+        selectedSession = GetActiveSession(computer.Id);
+        manualHours = 1;
+        manualReason = string.Empty;
+        showAddTimeDialog = selectedSession is not null;
+    }
+
+    private void CloseAddTimeDialog()
+    {
+        showAddTimeDialog = false;
+        selectedSession = null;
+        manualReason = string.Empty;
+    }
+
+    private async Task StartSessionAsync()
+    {
+        if (selectedComputer is null || selectedClientId == 0 || selectedTariffId == 0)
+        {
+            notification = "Выберите компьютер, клиента и тариф.";
+            return;
+        }
+
+        var result = await ClubManagementService.StartSessionAsync(selectedComputer.Id, selectedClientId, selectedTariffId, sessionHours);
+        notification = result.Message;
+
+        if (result.Succeeded)
+        {
+            CloseStartSessionDialog();
+        }
+
+        await LoadDataAsync();
+    }
+
+    private async Task ExtendSessionAsync()
+    {
+        if (selectedSession is null || extendTariffId == 0)
+        {
+            notification = "Выберите активный сеанс и тариф.";
+            return;
+        }
+
+        var result = await ClubManagementService.ExtendSessionByTariffAsync(selectedSession.Id, extendTariffId, extendHours);
+        notification = result.Message;
+
+        if (result.Succeeded)
+        {
+            CloseExtendSessionDialog();
+        }
+
+        await LoadDataAsync();
+    }
+
+    private async Task AddManualTimeAsync()
+    {
+        if (selectedSession is null)
+        {
+            notification = "Выберите активный сеанс.";
+            return;
+        }
+
+        var result = await ClubManagementService.AddSessionTimeAsync(selectedSession.Id, manualHours, manualReason);
+        notification = result.Message;
+
+        if (result.Succeeded)
+        {
+            CloseAddTimeDialog();
+        }
+
+        await LoadDataAsync();
+    }
+
+    private async Task TurnOnComputerAsync(int computerId)
+    {
+        CloseComputerMenu();
+        await ClubManagementService.TurnOnComputerAsync(computerId);
+        notification = "Компьютер включен.";
+        await LoadDataAsync();
+    }
+
+    private async Task TurnOffComputerAsync(int computerId)
+    {
+        CloseComputerMenu();
+        await ClubManagementService.TurnOffComputerAsync(computerId);
+        notification = "Компьютер выключен.";
+        await LoadDataAsync();
+    }
+
+    private async Task RestartComputerAsync(int computerId)
+    {
+        CloseComputerMenu();
+        await ClubManagementService.RestartComputerAsync(computerId);
+        notification = "Компьютер перезагружен.";
+        await LoadDataAsync();
+    }
+
+    private void OpenComputerMenu(MouseEventArgs args, Computer computer)
+    {
+        contextMenuComputer = computer;
+        contextMenuX = args.ClientX;
+        contextMenuY = args.ClientY;
+        showComputerMenu = true;
+    }
+
+    private void CloseComputerMenu()
+    {
+        showComputerMenu = false;
+        contextMenuComputer = null;
+    }
+
+    private GameSession? GetActiveSession(int computerId)
+    {
+        return activeSessions.FirstOrDefault(session => session.ComputerId == computerId);
+    }
+
+    private Booking? GetActiveBooking(int computerId)
+    {
+        return activeBookings.FirstOrDefault(booking => booking.ComputerId == computerId);
+    }
+
+    private static string GetClientName(Client? client)
+    {
+        return client is null ? "Гость не найден" : $"{client.FirstName} {client.LastName}";
+    }
+
+    private int CountComputers(string statusCode)
+    {
+        return zones.SelectMany(zone => zone.Computers)
+            .Count(computer => computer.Status?.Code == statusCode);
+    }
+
+    private bool CanStartSession(Computer computer)
+    {
+        return HasOpenShift && computer.Status?.CanStartSession == true;
+    }
+
+    private decimal CalculateSessionPrice()
+    {
+        if (SelectedTariff is null)
+        {
+            return 0;
+        }
+
+        var price = GetTariffPrice(SelectedTariff, selectedComputer?.ZoneId ?? 0);
+
+        return SelectedTariff.IsHourly
+            ? price * Math.Max(sessionHours, 0.5m)
+            : price;
+    }
+
+    private decimal CalculateExtendPrice()
+    {
+        if (SelectedExtendTariff is null)
+        {
+            return 0;
+        }
+
+        var price = GetTariffPrice(SelectedExtendTariff, selectedSession?.Computer?.ZoneId ?? 0);
+
+        return SelectedExtendTariff.IsHourly
+            ? price * Math.Max(extendHours, 0.5m)
+            : price;
+    }
+
+    private static string FormatMoney(decimal value)
+    {
+        return $"{value:N0} ₽";
+    }
+
+    private static decimal GetTariffPrice(Tariff tariff, int zoneId)
+    {
+        return tariff.TariffZones.FirstOrDefault(tariffZone => tariffZone.ZoneId == zoneId)?.Price ?? 0;
+    }
+
+    private static string GetStatusText(ComputerStatus? status)
+    {
+        return status?.Name ?? "Неизвестно";
+    }
+
+    private static string GetStatusBadgeClass(ComputerStatus? status)
+    {
+        return status?.Code switch
+        {
+            ComputerStatusCodes.Available => "text-bg-success",
+            ComputerStatusCodes.Busy => "text-bg-primary",
+            ComputerStatusCodes.Reserved => "text-bg-warning",
+            ComputerStatusCodes.Maintenance => "text-bg-danger",
+            ComputerStatusCodes.Disabled => "text-bg-secondary",
+            _ => "text-bg-light"
+        };
+    }
+
+    private static string GetComputerRowClass(Computer computer, GameSession? session)
+    {
+        return session is not null && session.PlannedEndAt < DateTime.Now
+            ? "computer-row row-overdue"
+            : computer.Status?.Code switch
+            {
+                ComputerStatusCodes.Available => "computer-row row-available",
+                ComputerStatusCodes.Busy => "computer-row row-busy",
+                ComputerStatusCodes.Reserved => "computer-row row-reserved",
+                ComputerStatusCodes.Maintenance => "computer-row row-maintenance",
+                ComputerStatusCodes.Disabled => "computer-row row-disabled",
+                _ => "computer-row"
+            };
+    }
+
+    private static string GetComputerIndicatorClass(Computer computer, GameSession? session)
+    {
+        return session is not null && session.PlannedEndAt < DateTime.Now
+            ? "indicator-overdue"
+            : computer.Status?.Code switch
+            {
+                ComputerStatusCodes.Available => "indicator-available",
+                ComputerStatusCodes.Busy => "indicator-busy",
+                ComputerStatusCodes.Reserved => "indicator-reserved",
+                ComputerStatusCodes.Maintenance => "indicator-maintenance",
+                ComputerStatusCodes.Disabled => "indicator-disabled",
+                _ => "indicator-unknown"
+            };
+    }
+
+    private static string GetComputerStateText(Computer computer, GameSession? session)
+    {
+        if (session is not null)
+        {
+            return session.PlannedEndAt < DateTime.Now
+                ? "Сессия просрочена"
+                : "Сессия активна";
+        }
+
+        return computer.Status?.Code switch
+        {
+            ComputerStatusCodes.Available => "Готов к запуску",
+            ComputerStatusCodes.Reserved => "Зарезервирован",
+            ComputerStatusCodes.Maintenance => "Требует обслуживания",
+            ComputerStatusCodes.Disabled => "Питание выключено",
+            _ => "Статус неизвестен"
+        };
+    }
+
+    private static string GetComputerStateTextClass(Computer computer, GameSession? session)
+    {
+        return session is not null && session.PlannedEndAt < DateTime.Now
+            ? "text-danger fw-semibold"
+            : computer.Status?.Code switch
+            {
+                ComputerStatusCodes.Available => "text-success",
+                ComputerStatusCodes.Busy => "text-primary",
+                ComputerStatusCodes.Reserved => "text-warning-emphasis",
+                ComputerStatusCodes.Maintenance => "text-danger",
+                ComputerStatusCodes.Disabled => "text-secondary",
+                _ => "text-muted"
+            };
+    }
+
+    private static string GetComputerActionHint(Computer computer, GameSession? session)
+    {
+        if (session is not null)
+        {
+            return session.PlannedEndAt < DateTime.Now
+                ? "Проверьте гостя или продлите время"
+                : "Можно продлить или добавить время";
+        }
+
+        return computer.Status?.Code switch
+        {
+            ComputerStatusCodes.Available => "Правая кнопка: начать сессию",
+            ComputerStatusCodes.Reserved => "Можно начать сессию по брони",
+            ComputerStatusCodes.Maintenance => "Запуск недоступен",
+            ComputerStatusCodes.Disabled => "Правая кнопка: включить",
+            _ => "Правая кнопка: действия"
+        };
+    }
+
+    private static string GetSessionTimeLeftText(GameSession session)
+    {
+        var timeLeft = session.PlannedEndAt - DateTime.Now;
+        if (timeLeft <= TimeSpan.Zero)
+        {
+            return "истекло";
+        }
+
+        return timeLeft.TotalHours >= 1
+            ? $"{(int)timeLeft.TotalHours} ч {timeLeft.Minutes} мин"
+            : $"{timeLeft.Minutes} мин";
+    }
+
+    private static string GetSessionTimeTextClass(GameSession session)
+    {
+        var timeLeft = session.PlannedEndAt - DateTime.Now;
+        return timeLeft <= TimeSpan.Zero
+            ? "small text-danger fw-semibold"
+            : timeLeft.TotalMinutes <= 15
+                ? "small text-warning-emphasis fw-semibold"
+                : "small text-muted";
+    }
+
+    private static int GetSessionProgressPercent(GameSession session)
+    {
+        var total = session.PlannedEndAt - session.StartedAt;
+        if (total.TotalSeconds <= 0)
+        {
+            return 100;
+        }
+
+        var elapsed = DateTime.Now - session.StartedAt;
+        return Math.Clamp((int)Math.Round(elapsed.TotalSeconds / total.TotalSeconds * 100), 0, 100);
+    }
+
+    private static string GetSessionProgressClass(GameSession session)
+    {
+        var timeLeft = session.PlannedEndAt - DateTime.Now;
+        return timeLeft <= TimeSpan.Zero
+            ? "bg-danger"
+            : timeLeft.TotalMinutes <= 15
+                ? "bg-warning"
+                : "bg-primary";
+    }
+}

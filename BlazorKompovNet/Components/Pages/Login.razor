@@ -1,0 +1,71 @@
+@page "/login"
+@attribute [AllowAnonymous]
+
+<PageTitle>Вход кассира</PageTitle>
+
+<div class="login-shell">
+    <div class="login-hero">
+        <div class="login-brand">
+            <img class="login-brand-logo" src="kompovnet-logo.png" alt="" aria-hidden="true" />
+        </div>
+
+        <h1>Рабочее место кассира</h1>
+        <p>Управляйте сменой, гостями, игровыми сессиями и оплатами из единой панели.</p>
+
+        <div class="login-highlights">
+            <div>
+                <strong>Сессии</strong>
+                <span>Запуск и продление игрового времени</span>
+            </div>
+            <div>
+                <strong>Касса</strong>
+                <span>Пополнения, списания и история операций</span>
+            </div>
+            <div>
+                <strong>Зал</strong>
+                <span>Статусы ПК и бронирования</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="login-panel">
+        <div class="card login-card">
+            <div class="card-body p-4 p-lg-5">
+                <p class="login-eyebrow">Авторизация</p>
+                <h2 class="h3 mb-2">Вход кассира</h2>
+                <p class="text-muted mb-4">Введите учетные данные, чтобы открыть панель управления клубом.</p>
+
+                @if (Error == "1")
+                {
+                    <div class="alert alert-danger" role="alert">
+                        Неверный логин или пароль.
+                    </div>
+                }
+
+                <form method="post" action="/auth/login">
+                    <div class="mb-3">
+                        <label class="form-label" for="userName">Логин</label>
+                        <input class="form-control form-control-lg" id="userName" name="userName" autocomplete="username" placeholder="admin" required />
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label" for="password">Пароль</label>
+                        <input class="form-control form-control-lg" id="password" name="password" type="password" autocomplete="current-password" placeholder="Введите пароль" required />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg w-100">Войти в систему</button>
+                </form>
+
+                <div class="login-demo-note">
+                    <span>Тестовый доступ</span>
+                    <strong>admin / admin</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+}

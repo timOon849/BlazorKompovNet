@@ -1,0 +1,447 @@
+@page "/sessions"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IClubManagementService ClubManagementService
+
+<PageTitle>Игровые сессии</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1>Игровые сессии</h1>
+        <p class="text-muted mb-0">Активные и завершенные игровые сессии клуба.</p>
+    </div>
+
+    <div class="d-flex gap-2">
+        <a class="btn btn-success" download="sessions.csv" href="@ExportCsvHref">Экспорт CSV</a>
+        <button class="btn btn-outline-primary" type="button" @onclick="LoadSessionsAsync">Обновить</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(notification))
+{
+    <div class="alert alert-info">@notification</div>
+}
+
+@if (sessions is null)
+{
+    <p><em>Загрузка данных...</em></p>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card h-100 border-primary">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Активные</p>
+                    <h2 class="h3 mb-0">@FilteredSessions.Count(session => GetSessionDisplayStatus(session) == "Active")</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100 border-warning">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Просроченные</p>
+                    <h2 class="h3 mb-0">@FilteredSessions.Count(session => GetSessionDisplayStatus(session) == "Overdue")</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Завершенные</p>
+                    <h2 class="h3 mb-0">@FilteredSessions.Count(session => session.Status == "Completed")</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Выручка</p>
+                    <h2 class="h3 mb-0">@FormatMoney(FilteredSessions.Sum(session => session.TotalPrice))</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Сессий</p>
+                    <h2 class="h3 mb-0">@FilteredSessions.Count()</h2>
+                    <p class="small text-muted mb-0">Всего в истории: @sessions.Count</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-lg-4">
+                    <label class="form-label" for="sessionSearch">Поиск</label>
+                    <input class="form-control"
+                           id="sessionSearch"
+                           placeholder="Клиент, компьютер, зона или тариф"
+                           @bind="searchText"
+                           @bind:event="oninput" />
+                </div>
+
+                <div class="col-md-4 col-lg-2">
+                    <label class="form-label" for="sessionStatus">Статус</label>
+                    <select class="form-select" id="sessionStatus" @bind="statusFilter">
+                        <option value="">Все</option>
+                        <option value="Active">Активные</option>
+                        <option value="Overdue">Просроченные</option>
+                        <option value="Completed">Завершенные</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4 col-lg-2">
+                    <label class="form-label" for="sessionPeriod">Период</label>
+                    <select class="form-select" id="sessionPeriod" @bind="periodFilter">
+                        <option value="">Все даты</option>
+                        <option value="Today">Сегодня</option>
+                        <option value="Shift">Текущая смена</option>
+                        <option value="Custom">Свой период</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4 col-lg-2 d-flex align-items-end">
+                    <button class="btn btn-outline-secondary w-100" type="button" @onclick="ResetFilters">Сбросить</button>
+                </div>
+
+                @if (periodFilter == "Custom")
+                {
+                    <div class="col-md-4 col-lg-3">
+                        <label class="form-label" for="sessionDateFrom">С</label>
+                        <input class="form-control" id="sessionDateFrom" type="date" value="@dateFromText" @onchange="SetDateFrom" />
+                    </div>
+
+                    <div class="col-md-4 col-lg-3">
+                        <label class="form-label" for="sessionDateTo">По</label>
+                        <input class="form-control" id="sessionDateTo" type="date" value="@dateToText" @onchange="SetDateTo" />
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            @if (!FilteredSessions.Any())
+            {
+                <p class="text-muted mb-0">Сессий по выбранным фильтрам нет.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Сессия</th>
+                                <th>Клиент</th>
+                                <th>Компьютер</th>
+                                <th>Тариф</th>
+                                <th>Время</th>
+                                <th>Статус</th>
+                                <th class="text-end">Сумма</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var session in FilteredSessions)
+                            {
+                                <tr>
+                                    <td>
+                                        <strong>#@session.Id</strong>
+                                        <div class="text-muted small">@session.StartedAt.ToString("dd.MM.yyyy HH:mm")</div>
+                                    </td>
+                                    <td>@GetClientName(session.Client)</td>
+                                    <td>
+                                        <strong>@(session.Computer?.Name ?? "-")</strong>
+                                        <div class="text-muted small">@(session.Computer?.Zone?.Name ?? "-")</div>
+                                    </td>
+                                    <td>@(session.Tariff?.Name ?? "-")</td>
+                                    <td>
+                                        <div>План: @session.PlannedEndAt.ToString("HH:mm")</div>
+                                        <div class="text-muted small">@GetSessionTimeText(session)</div>
+                                    </td>
+                                    <td><span class="badge @GetSessionStatusBadgeClass(GetSessionDisplayStatus(session))">@GetSessionStatusText(GetSessionDisplayStatus(session))</span></td>
+                                    <td class="text-end">@FormatMoney(session.TotalPrice)</td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <a class="btn btn-outline-primary" href="@($"/sessions/{session.Id}")">Детали</a>
+                                            <button class="btn btn-outline-success"
+                                                    type="button"
+                                                    disabled="@(session.Status != "Active")"
+                                                    @onclick="() => OpenCompleteDialog(session)">
+                                                Завершить
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (showCompleteDialog && selectedSession is not null)
+{
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, .45);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5">Завершить сессию #@selectedSession.Id?</h2>
+                    <button type="button" class="btn-close" aria-label="Закрыть" @onclick="CloseCompleteDialog"></button>
+                </div>
+
+                <div class="modal-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Клиент</dt>
+                        <dd class="col-sm-8">@GetClientName(selectedSession.Client)</dd>
+
+                        <dt class="col-sm-4">Компьютер</dt>
+                        <dd class="col-sm-8">@(selectedSession.Computer?.Name ?? "-")</dd>
+
+                        <dt class="col-sm-4">Тариф</dt>
+                        <dd class="col-sm-8">@(selectedSession.Tariff?.Name ?? "-")</dd>
+
+                        <dt class="col-sm-4">Стоимость</dt>
+                        <dd class="col-sm-8">@FormatMoney(selectedSession.TotalPrice)</dd>
+
+                        <dt class="col-sm-4">Факт</dt>
+                        <dd class="col-sm-8">@DateTime.Now.ToString("dd.MM.yyyy HH:mm")</dd>
+                    </dl>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseCompleteDialog">Отмена</button>
+                    <button type="button" class="btn btn-success" @onclick="ConfirmCompleteSessionAsync">Завершить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<GameSession>? sessions;
+    private CashierShift? currentShift;
+    private string? searchText;
+    private string? statusFilter;
+    private string? periodFilter;
+    private string? dateFromText;
+    private string? dateToText;
+    private string? notification;
+    private bool showCompleteDialog;
+    private GameSession? selectedSession;
+
+    private IEnumerable<GameSession> FilteredSessions => sessions?
+        .Where(MatchesFilters)
+        .OrderByDescending(session => session.StartedAt)
+        ?? Enumerable.Empty<GameSession>();
+
+    private int? CurrentShiftId => currentShift?.Id;
+
+    private string ExportCsvHref => BuildCsvHref();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSessionsAsync();
+    }
+
+    private async Task LoadSessionsAsync()
+    {
+        sessions = await ClubManagementService.GetSessionsAsync();
+        currentShift = await ClubManagementService.GetCurrentShiftAsync();
+    }
+
+    private void OpenCompleteDialog(GameSession session)
+    {
+        selectedSession = session;
+        showCompleteDialog = true;
+    }
+
+    private void CloseCompleteDialog()
+    {
+        selectedSession = null;
+        showCompleteDialog = false;
+    }
+
+    private async Task ConfirmCompleteSessionAsync()
+    {
+        if (selectedSession is null)
+        {
+            return;
+        }
+
+        var result = await ClubManagementService.CompleteSessionAsync(selectedSession.Id);
+        notification = result.Message;
+        CloseCompleteDialog();
+        await LoadSessionsAsync();
+    }
+
+    private bool MatchesFilters(GameSession session)
+    {
+        if (!string.IsNullOrWhiteSpace(statusFilter) && GetSessionDisplayStatus(session) != statusFilter)
+        {
+            return false;
+        }
+
+        if (!MatchesPeriod(session))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            return true;
+        }
+
+        var search = searchText.Trim();
+        return GetClientName(session.Client).Contains(search, StringComparison.OrdinalIgnoreCase)
+            || (session.Computer?.Name?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (session.Computer?.Number.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (session.Computer?.Zone?.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (session.Tariff?.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private void ResetFilters()
+    {
+        searchText = null;
+        statusFilter = null;
+        periodFilter = null;
+        dateFromText = null;
+        dateToText = null;
+    }
+
+    private void SetDateFrom(ChangeEventArgs args)
+    {
+        dateFromText = args.Value?.ToString();
+    }
+
+    private void SetDateTo(ChangeEventArgs args)
+    {
+        dateToText = args.Value?.ToString();
+    }
+
+    private bool MatchesPeriod(GameSession session)
+    {
+        var date = session.StartedAt.Date;
+        return periodFilter switch
+        {
+            "Today" => date == DateTime.Today,
+            "Shift" => session.CashierShiftId == CurrentShiftId,
+            "Custom" => MatchesCustomPeriod(date),
+            _ => true
+        };
+    }
+
+    private bool MatchesCustomPeriod(DateTime date)
+    {
+        if (DateTime.TryParse(dateFromText, out var from) && date < from.Date)
+        {
+            return false;
+        }
+
+        if (DateTime.TryParse(dateToText, out var to) && date > to.Date)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string GetClientName(Client? client)
+    {
+        return client is null ? "-" : $"{client.FirstName} {client.LastName}";
+    }
+
+    private static string GetSessionTimeText(GameSession session)
+    {
+        if (session.EndedAt is not null)
+        {
+            return $"Факт: {session.EndedAt:dd.MM.yyyy HH:mm}";
+        }
+
+        var remaining = session.PlannedEndAt - DateTime.Now;
+        return remaining <= TimeSpan.Zero
+            ? "Время истекло"
+            : $"Осталось {FormatDuration(remaining)}";
+    }
+
+    private static string GetSessionDisplayStatus(GameSession session)
+    {
+        return session.Status == "Active" && session.PlannedEndAt < DateTime.Now
+            ? "Overdue"
+            : session.Status;
+    }
+
+    private static string GetSessionStatusText(string status)
+    {
+        return status switch
+        {
+            "Active" => "Активна",
+            "Overdue" => "Просрочена",
+            "Completed" => "Завершена",
+            _ => status
+        };
+    }
+
+    private static string GetSessionStatusBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Active" => "text-bg-primary",
+            "Overdue" => "text-bg-warning",
+            "Completed" => "text-bg-success",
+            _ => "text-bg-secondary"
+        };
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        return duration.TotalHours >= 1
+            ? $"{(int)duration.TotalHours} ч {duration.Minutes} мин"
+            : $"{duration.Minutes} мин";
+    }
+
+    private static string FormatMoney(decimal value)
+    {
+        return $"{value:N0} ₽";
+    }
+
+    private string BuildCsvHref()
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.AppendLine("Id;StartedAt;PlannedEndAt;EndedAt;Status;Client;Computer;Tariff;TotalPrice");
+
+        foreach (var session in FilteredSessions)
+        {
+            builder.AppendLine(string.Join(';',
+                EscapeCsv(session.Id.ToString()),
+                EscapeCsv(session.StartedAt.ToString("dd.MM.yyyy HH:mm")),
+                EscapeCsv(session.PlannedEndAt.ToString("dd.MM.yyyy HH:mm")),
+                EscapeCsv(session.EndedAt?.ToString("dd.MM.yyyy HH:mm") ?? "-"),
+                EscapeCsv(GetSessionStatusText(GetSessionDisplayStatus(session))),
+                EscapeCsv(GetClientName(session.Client)),
+                EscapeCsv(session.Computer?.Name ?? "-"),
+                EscapeCsv(session.Tariff?.Name ?? "-"),
+                EscapeCsv(session.TotalPrice.ToString("N2"))));
+        }
+
+        return $"data:text/csv;charset=utf-8,{Uri.EscapeDataString(builder.ToString())}";
+    }
+
+    private static string EscapeCsv(string value)
+    {
+        const char quote = '"';
+        var quoteText = quote.ToString();
+        return quote + value.Replace(quoteText, quoteText + quoteText) + quote;
+    }
+}

@@ -1,0 +1,461 @@
+@page "/transactions"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IClubManagementService ClubManagementService
+
+<PageTitle>Транзакции</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1>Транзакции</h1>
+        <p class="text-muted mb-0">Финансовая история пополнений и списаний за игровые сессии.</p>
+    </div>
+
+    <div class="d-flex gap-2">
+        <a class="btn btn-success" download="transactions.csv" href="@ExportCsvHref">Экспорт CSV</a>
+        <button class="btn btn-outline-primary" type="button" @onclick="LoadTransactionsAsync">Обновить</button>
+    </div>
+</div>
+
+@if (transactions is null)
+{
+    <p><em>Загрузка данных...</em></p>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card h-100 border-success">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Поступления</p>
+                    <h2 class="h3 mb-0">@FormatMoney(TotalIncome)</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100 border-primary">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Списания за сессии</p>
+                    <h2 class="h3 mb-0">@FormatMoney(TotalSessionCharges)</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Выборка</p>
+                    <h2 class="h3 mb-0">@FormatMoney(TotalIncome + TotalSessionCharges)</h2>
+                    <p class="small text-muted mb-0">Поступления + сессии</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Операций</p>
+                    <h2 class="h3 mb-0">@FilteredTransactions.Count()</h2>
+                    <p class="small text-muted mb-0">Всего в истории: @transactions.Count</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-2">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Наличные</p>
+                    <h3 class="h5 mb-0">@FormatMoney(PaymentTotal("Cash"))</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-2">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Карта</p>
+                    <h3 class="h5 mb-0">@FormatMoney(PaymentTotal("Card"))</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-2">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">СБП</p>
+                    <h3 class="h5 mb-0">@FormatMoney(PaymentTotal("Sbp"))</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-2">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Баланс</p>
+                    <h3 class="h5 mb-0">@FormatMoney(PaymentTotal("Balance"))</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-2">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Бонусы</p>
+                    <h3 class="h5 mb-0">@FormatMoney(BonusTotal)</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-2">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Смена</p>
+                    <h3 class="h5 mb-0">@FormatMoney(CurrentShiftTotal)</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-lg-4">
+                    <label class="form-label" for="transactionSearch">Поиск</label>
+                    <input class="form-control"
+                           id="transactionSearch"
+                           placeholder="Клиент, тип или способ оплаты"
+                           @bind="searchText"
+                           @bind:event="oninput" />
+                </div>
+
+                <div class="col-md-4 col-lg-2">
+                    <label class="form-label" for="transactionType">Тип</label>
+                    <select class="form-select" id="transactionType" @bind="typeFilter">
+                        <option value="">Все типы</option>
+                        @foreach (var type in TransactionTypes)
+                        {
+                            <option value="@type">@GetTransactionTypeText(type)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-md-4 col-lg-2">
+                    <label class="form-label" for="transactionStatus">Статус</label>
+                    <select class="form-select" id="transactionStatus" @bind="statusFilter">
+                        <option value="">Все</option>
+                        @foreach (var status in Enum.GetValues<PaymentStatus>())
+                        {
+                            <option value="@status">@GetStatusText(status)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-md-4 col-lg-2">
+                    <label class="form-label" for="transactionPeriod">Период</label>
+                    <select class="form-select" id="transactionPeriod" @bind="periodFilter">
+                        <option value="">Все даты</option>
+                        <option value="Today">Сегодня</option>
+                        <option value="Shift">Текущая смена</option>
+                        <option value="Custom">Свой период</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4 col-lg-2 d-flex align-items-end">
+                    <button class="btn btn-outline-secondary w-100" type="button" @onclick="ResetFilters">Сбросить</button>
+                </div>
+
+                @if (periodFilter == "Custom")
+                {
+                    <div class="col-md-4 col-lg-3">
+                        <label class="form-label" for="transactionDateFrom">С</label>
+                        <input class="form-control" id="transactionDateFrom" type="date" value="@dateFromText" @onchange="SetDateFrom" />
+                    </div>
+
+                    <div class="col-md-4 col-lg-3">
+                        <label class="form-label" for="transactionDateTo">По</label>
+                        <input class="form-control" id="transactionDateTo" type="date" value="@dateToText" @onchange="SetDateTo" />
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            @if (!FilteredTransactions.Any())
+            {
+                <p class="text-muted mb-0">Транзакций по выбранным фильтрам нет.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Тип</th>
+                                <th>Клиент</th>
+                                <th>Способ</th>
+                                <th>Статус</th>
+                                <th class="text-end">Сумма</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var transaction in FilteredTransactions)
+                            {
+                                <tr>
+                                    <td>
+                                        <strong>@transaction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</strong>
+                                        <div class="text-muted small">@transaction.CreatedAt.ToLocalTime().ToString("HH:mm")</div>
+                                    </td>
+                                    <td>@GetTransactionTypeText(transaction.Type)</td>
+                                    <td>@GetClientName(transaction.Client)</td>
+                                    <td>@(transaction.PaymentType?.Name ?? "-")</td>
+                                    <td><span class="badge @GetStatusBadgeClass(transaction.Status)">@GetStatusText(transaction.Status)</span></td>
+                                    <td class="text-end @(IsSessionCharge(transaction) ? "text-primary" : "text-success")">
+                                        @FormatTransactionAmount(transaction)
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            @if (transaction.GameSessionId is not null)
+                                            {
+                                                <a class="btn btn-outline-secondary" href="@($"/sessions/{transaction.GameSessionId}")">Сессия</a>
+                                            }
+                                            <a class="btn btn-outline-primary" href="@($"/transactions/{transaction.Id}")">Детали</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<Transaction>? transactions;
+    private CashierShift? currentShift;
+    private string? searchText;
+    private string? typeFilter;
+    private string? statusFilter;
+    private string? periodFilter;
+    private string? dateFromText;
+    private string? dateToText;
+
+    private IEnumerable<Transaction> FilteredTransactions => transactions?
+        .Where(MatchesFilters)
+        .OrderByDescending(transaction => transaction.CreatedAt)
+        ?? Enumerable.Empty<Transaction>();
+
+    private IEnumerable<string> TransactionTypes => transactions?
+        .Select(transaction => transaction.Type)
+        .Where(type => !string.IsNullOrWhiteSpace(type))
+        .Distinct()
+        .OrderBy(GetTransactionTypeText)
+        ?? Enumerable.Empty<string>();
+
+    private decimal TotalIncome => FilteredTransactions
+        .Where(transaction => !IsSessionCharge(transaction))
+        .Sum(transaction => transaction.Amount);
+
+    private decimal TotalSessionCharges => FilteredTransactions
+        .Where(IsSessionCharge)
+        .Sum(transaction => transaction.Amount);
+
+    private decimal BonusTotal => FilteredTransactions
+        .Where(transaction => transaction.PaymentType?.IsBonus == true)
+        .Sum(transaction => transaction.Amount);
+
+    private decimal CurrentShiftTotal => FilteredTransactions
+        .Where(transaction => transaction.CashierShiftId == CurrentShiftId)
+        .Sum(transaction => transaction.Amount);
+
+    private int? CurrentShiftId => currentShift?.Id;
+
+    private string ExportCsvHref => BuildCsvHref();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTransactionsAsync();
+    }
+
+    private async Task LoadTransactionsAsync()
+    {
+        transactions = await ClubManagementService.GetTransactionsAsync();
+        currentShift = await ClubManagementService.GetCurrentShiftAsync();
+    }
+
+    private bool MatchesFilters(Transaction transaction)
+    {
+        if (!string.IsNullOrWhiteSpace(typeFilter) && transaction.Type != typeFilter)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(statusFilter) && transaction.Status.ToString() != statusFilter)
+        {
+            return false;
+        }
+
+        if (!MatchesPeriod(transaction))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            return true;
+        }
+
+        var search = searchText.Trim();
+        return GetClientName(transaction.Client).Contains(search, StringComparison.OrdinalIgnoreCase)
+            || GetTransactionTypeText(transaction.Type).Contains(search, StringComparison.OrdinalIgnoreCase)
+            || transaction.Type.Contains(search, StringComparison.OrdinalIgnoreCase)
+            || (transaction.PaymentType?.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private void ResetFilters()
+    {
+        searchText = null;
+        typeFilter = null;
+        statusFilter = null;
+        periodFilter = null;
+        dateFromText = null;
+        dateToText = null;
+    }
+
+    private void SetDateFrom(ChangeEventArgs args)
+    {
+        dateFromText = args.Value?.ToString();
+    }
+
+    private void SetDateTo(ChangeEventArgs args)
+    {
+        dateToText = args.Value?.ToString();
+    }
+
+    private bool MatchesPeriod(Transaction transaction)
+    {
+        var date = transaction.CreatedAt.ToLocalTime().Date;
+        return periodFilter switch
+        {
+            "Today" => date == DateTime.Today,
+            "Shift" => transaction.CashierShiftId == CurrentShiftId,
+            "Custom" => MatchesCustomPeriod(date),
+            _ => true
+        };
+    }
+
+    private bool MatchesCustomPeriod(DateTime date)
+    {
+        if (DateTime.TryParse(dateFromText, out var from) && date < from.Date)
+        {
+            return false;
+        }
+
+        if (DateTime.TryParse(dateToText, out var to) && date > to.Date)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private decimal PaymentTotal(string paymentCode)
+    {
+        return FilteredTransactions
+            .Where(transaction => transaction.PaymentType?.Code == paymentCode)
+            .Sum(transaction => transaction.Amount);
+    }
+
+    private static bool IsSessionCharge(Transaction transaction)
+    {
+        return transaction.Type is "SessionStart" or "SessionExtension";
+    }
+
+    private static string GetClientName(Client? client)
+    {
+        return client is null ? "-" : $"{client.FirstName} {client.LastName}";
+    }
+
+    private static string GetTransactionTypeText(string type)
+    {
+        return type switch
+        {
+            "BalanceTopUp" => "Пополнение баланса",
+            "BonusAccrual" => "Бонусное пополнение",
+            "SessionStart" => "Старт сессии",
+            "SessionExtension" => "Продление сессии",
+            _ => type
+        };
+    }
+
+    private static string GetStatusText(PaymentStatus status)
+    {
+        return status switch
+        {
+            PaymentStatus.Pending => "Ожидает",
+            PaymentStatus.Paid => "Оплачено",
+            PaymentStatus.Refunded => "Возврат",
+            PaymentStatus.Cancelled => "Отменено",
+            _ => status.ToString()
+        };
+    }
+
+    private static string GetStatusBadgeClass(PaymentStatus status)
+    {
+        return status switch
+        {
+            PaymentStatus.Paid => "text-bg-success",
+            PaymentStatus.Pending => "text-bg-warning",
+            PaymentStatus.Refunded => "text-bg-info",
+            PaymentStatus.Cancelled => "text-bg-secondary",
+            _ => "text-bg-light"
+        };
+    }
+
+    private static string FormatTransactionAmount(Transaction transaction)
+    {
+        var prefix = IsSessionCharge(transaction) ? "-" : "+";
+        return $"{prefix}{FormatMoney(transaction.Amount)}";
+    }
+
+    private string BuildCsvHref()
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.AppendLine("Id;Date;Type;Client;Payment;Status;Amount;SessionId");
+
+        foreach (var transaction in FilteredTransactions)
+        {
+            builder.AppendLine(string.Join(';',
+                EscapeCsv(transaction.Id.ToString()),
+                EscapeCsv(transaction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")),
+                EscapeCsv(GetTransactionTypeText(transaction.Type)),
+                EscapeCsv(GetClientName(transaction.Client)),
+                EscapeCsv(transaction.PaymentType?.Name ?? "-"),
+                EscapeCsv(GetStatusText(transaction.Status)),
+                EscapeCsv(transaction.Amount.ToString("N2")),
+                EscapeCsv(transaction.GameSessionId?.ToString() ?? "-")));
+        }
+
+        return $"data:text/csv;charset=utf-8,{Uri.EscapeDataString(builder.ToString())}";
+    }
+
+    private static string EscapeCsv(string value)
+    {
+        const char quote = '"';
+        var quoteText = quote.ToString();
+        return quote + value.Replace(quoteText, quoteText + quoteText) + quote;
+    }
+
+    private static string FormatMoney(decimal value)
+    {
+        return $"{value:N0} ₽";
+    }
+}

@@ -1,0 +1,269 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IDashboardService DashboardService
+@inject IClubManagementService ClubManagementService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Дашборд клуба</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1>Дашборд клуба</h1>
+        <p class="text-muted mb-0">Сводка по текущему клубу, смене и состоянию зала.</p>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(notification))
+{
+    <div class="alert alert-info">@notification</div>
+}
+
+@if (stats is null)
+{
+    <p><em>Загрузка данных...</em></p>
+}
+else
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-center">
+                <div class="col-lg-6">
+                    <p class="text-muted mb-1">Текущий клуб приложения</p>
+                    <h2 class="h4 mb-1">@(stats.CurrentClub?.Name ?? "Клуб не выбран")</h2>
+                    <p class="mb-0 text-muted">@(stats.CurrentClub?.Address ?? "Адрес не указан")</p>
+                </div>
+
+                <div class="col-sm-4 col-lg-2">
+                    <div class="border rounded p-3">
+                        <div class="text-muted small">ID клуба</div>
+                        <div class="h5 mb-0">@(stats.CurrentClub?.Id.ToString() ?? "-")</div>
+                    </div>
+                </div>
+
+                <div class="col-sm-4 col-lg-2">
+                    <div class="border rounded p-3">
+                        <div class="text-muted small">Клубов в сети</div>
+                        <div class="h5 mb-0">@stats.AvailableClubs.Count</div>
+                    </div>
+                </div>
+
+                <div class="col-sm-4 col-lg-2">
+                    <div class="border rounded p-3">
+                        <div class="text-muted small">Статус</div>
+                        <span class="badge @(stats.CurrentClub?.IsActive == true ? "text-bg-success" : "text-bg-secondary")">
+                            @(stats.CurrentClub?.IsActive == true ? "Активен" : "Неактивен")
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            @if (stats.AvailableClubs.Count > 1)
+            {
+                <div class="mt-3 pt-3 border-top">
+                    <div class="text-muted small mb-2">Доступные клубы</div>
+                    <div class="d-flex flex-wrap gap-2">
+                        @foreach (var club in stats.AvailableClubs)
+                        {
+                            <span class="badge @(club.Id == stats.CurrentClub?.Id ? "text-bg-primary" : "text-bg-secondary")">
+                                @club.Name
+                            </span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card h-100 border-success">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Выручка за день</p>
+                    <h2 class="h3 mb-0">@FormatMoney(stats.RevenueToday)</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Выручка смены</p>
+                    <h2 class="h3 mb-0">@FormatMoney(stats.RevenueCurrentShift)</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Посетителей сегодня</p>
+                    <h2 class="h3 mb-0">@stats.VisitorsToday</h2>
+                    <p class="small text-muted mb-0">Сейчас в клубе: @stats.ActiveVisitors</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Бронирований сегодня</p>
+                    <h2 class="h3 mb-0">@stats.BookingsToday</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h2 class="h5">Состояние компьютеров</h2>
+
+                    <div class="row text-center g-3 mt-1">
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-3">
+                                <div class="h3 mb-0 text-success">@stats.AvailableComputers</div>
+                                <div class="text-muted small">Свободно</div>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-3">
+                                <div class="h3 mb-0 text-primary">@stats.BusyComputers</div>
+                                <div class="text-muted small">Занято</div>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-3">
+                                <div class="h3 mb-0 text-warning">@stats.ReservedComputers</div>
+                                <div class="text-muted small">Бронь</div>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-3">
+                                <div class="h3 mb-0 text-danger">@stats.MaintenanceComputers</div>
+                                <div class="text-muted small">Ремонт</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h2 class="h5">Текущая смена</h2>
+
+                    @if (stats.CurrentShift is null)
+                    {
+                        <div class="alert alert-warning">
+                            Открытой смены нет. Кассовые операции недоступны до открытия смены.
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="openingCashAmount">Сумма в кассе на старте</label>
+                            <input class="form-control" id="openingCashAmount" type="number" min="0" step="100" @bind="openingCashAmount" />
+                        </div>
+
+                        <button class="btn btn-primary" type="button" @onclick="OpenShiftAsync">Открыть смену</button>
+                    }
+                    else
+                    {
+                        <dl class="row mb-0">
+                            <dt class="col-sm-5">Кассир</dt>
+                            <dd class="col-sm-7">@stats.CurrentShift.Cashier?.FullName</dd>
+
+                            <dt class="col-sm-5">Открыта</dt>
+                            <dd class="col-sm-7">@stats.CurrentShift.OpenedAt.ToString("dd.MM.yyyy HH:mm")</dd>
+
+                            <dt class="col-sm-5">Длительность</dt>
+                            <dd class="col-sm-7">@FormatDuration(DateTime.Now - stats.CurrentShift.OpenedAt)</dd>
+
+                            <dt class="col-sm-5">Касса на старте</dt>
+                            <dd class="col-sm-7">@FormatMoney(stats.CurrentShift.OpeningCashAmount)</dd>
+
+                            <dt class="col-sm-5">Сейчас в кассе</dt>
+                            <dd class="col-sm-7">@FormatMoney(stats.CurrentShift.CurrentCashAmount)</dd>
+                        </dl>
+
+                        <div class="mt-3 pt-3 border-top">
+                            <label class="form-label" for="closingCashAmount">Фактическая сумма в кассе</label>
+                            <input class="form-control mb-2" id="closingCashAmount" type="number" min="0" step="100" @bind="closingCashAmount" />
+                            <button class="btn btn-outline-danger" type="button" @onclick="CloseShiftAsync">Закрыть смену</button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DashboardStats? stats;
+    private string? notification;
+    private decimal openingCashAmount;
+    private decimal closingCashAmount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatsAsync();
+    }
+
+    private async Task LoadStatsAsync()
+    {
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        stats = await DashboardService.GetDashboardStatsAsync(authenticationState.User);
+        closingCashAmount = stats.CurrentShift?.CurrentCashAmount ?? 0;
+    }
+
+    private async Task OpenShiftAsync()
+    {
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var cashierId = GetCashierId(authenticationState.User);
+        var result = await ClubManagementService.OpenShiftAsync(cashierId, openingCashAmount);
+
+        notification = result.Message;
+        if (result.Succeeded)
+        {
+            openingCashAmount = 0;
+        }
+
+        await LoadStatsAsync();
+    }
+
+    private async Task CloseShiftAsync()
+    {
+        if (stats?.CurrentShift is null)
+        {
+            notification = "Открытая смена не найдена.";
+            return;
+        }
+
+        var result = await ClubManagementService.CloseShiftAsync(stats.CurrentShift.Id, closingCashAmount);
+        notification = result.Message;
+        await LoadStatsAsync();
+    }
+
+    private static int GetCashierId(System.Security.Claims.ClaimsPrincipal user)
+    {
+        var cashierIdClaim = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        return int.TryParse(cashierIdClaim, out var cashierId) ? cashierId : 0;
+    }
+
+    private static string FormatMoney(decimal value)
+    {
+        return $"{value:N0} ₽";
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        return duration.TotalHours >= 1
+            ? $"{(int)duration.TotalHours} ч {duration.Minutes} мин"
+            : $"{duration.Minutes} мин";
+    }
+}

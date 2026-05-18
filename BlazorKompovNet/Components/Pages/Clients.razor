@@ -1,0 +1,189 @@
+@page "/clients"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IClubManagementService ClubManagementService
+
+<PageTitle>Клиенты</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1>Клиенты</h1>
+        <p class="text-muted mb-0">Гости клуба, их баланс, активность и история бронирований.</p>
+    </div>
+
+    <div class="d-flex gap-2">
+        <a class="btn btn-primary" href="/clients/register">Зарегистрировать</a>
+        <button class="btn btn-outline-primary" type="button" @onclick="LoadDataAsync">Обновить</button>
+    </div>
+</div>
+
+@if (clients is null)
+{
+    <p><em>Загрузка данных...</em></p>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Клиентов</p>
+                    <h2 class="h3 mb-0">@FilteredClients.Count()</h2>
+                    <p class="small text-muted mb-0">Всего в базе: @clients.Count</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Общий баланс</p>
+                    <h2 class="h3 mb-0">@FormatMoney(FilteredClients.Sum(client => client.Balance))</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Сейчас играют</p>
+                    <h2 class="h3 mb-0">@FilteredClients.Count(client => HasActiveSession(client.Id))</h2>
+                    <p class="small text-muted mb-0">Активных броней: @FilteredClients.Sum(client => ActiveBookingCount(client.Id))</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <label class="form-label" for="clientSearch">Поиск клиента</label>
+            <input class="form-control"
+                   id="clientSearch"
+                   placeholder="Имя, фамилия, телефон или email"
+                   @bind="searchText"
+                   @bind:event="oninput" />
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            @if (!FilteredClients.Any())
+            {
+                <p class="text-muted mb-0">Клиентов по выбранному поиску нет.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Клиент</th>
+                                <th>Контакты</th>
+                                <th>Статус</th>
+                                <th>Брони</th>
+                                <th class="text-end">Баланс</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var client in FilteredClients)
+                            {
+                                <tr>
+                                    <td>
+                                        <strong>@GetClientName(client)</strong>
+                                        <div class="text-muted small">С @client.RegisteredAt.ToLocalTime().ToString("dd.MM.yyyy")</div>
+                                    </td>
+                                    <td>
+                                        <div>@(client.PhoneNumber ?? "-")</div>
+                                        <div class="text-muted small">@(client.Email ?? "-")</div>
+                                    </td>
+                                    <td>
+                                        @if (HasActiveSession(client.Id))
+                                        {
+                                            <span class="badge text-bg-primary">Играет</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge text-bg-secondary">Нет сессии</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span>@ActiveBookingCount(client.Id) активных</span>
+                                        <div class="text-muted small">@ClientBookings(client.Id).Count() всего</div>
+                                    </td>
+                                    <td class="text-end">@FormatMoney(client.Balance)</td>
+                                    <td class="text-end">
+                                        <a class="btn btn-sm btn-outline-primary" href="@($"/clients/{client.Id}")">Карточка</a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<Client>? clients;
+    private IReadOnlyList<GameSession> sessions = [];
+    private IReadOnlyList<Booking> bookings = [];
+    private string? searchText;
+
+    private IEnumerable<Client> FilteredClients => clients?
+        .Where(MatchesSearch)
+        .OrderBy(client => client.LastName)
+        .ThenBy(client => client.FirstName)
+        ?? Enumerable.Empty<Client>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        clients = await ClubManagementService.GetClientsAsync();
+        sessions = await ClubManagementService.GetSessionsAsync();
+        bookings = await ClubManagementService.GetBookingsAsync();
+    }
+
+    private bool MatchesSearch(Client client)
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            return true;
+        }
+
+        var search = searchText.Trim();
+        return GetClientName(client).Contains(search, StringComparison.OrdinalIgnoreCase)
+            || (client.PhoneNumber?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (client.Email?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private bool HasActiveSession(int clientId)
+    {
+        return sessions.Any(session => session.ClientId == clientId && session.Status == "Active");
+    }
+
+    private int ActiveBookingCount(int clientId)
+    {
+        return ClientBookings(clientId).Count(booking => booking.Status is BookingStatus.Created or BookingStatus.Active);
+    }
+
+    private IEnumerable<Booking> ClientBookings(int clientId)
+    {
+        return bookings.Where(booking => booking.ClientId == clientId);
+    }
+
+    private static string GetClientName(Client client)
+    {
+        return $"{client.FirstName} {client.LastName}";
+    }
+
+    private static string FormatMoney(decimal value)
+    {
+        return $"{value:N0} ₽";
+    }
+}

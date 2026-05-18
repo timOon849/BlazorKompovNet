@@ -1,0 +1,77 @@
+@page "/clients/register"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IClubManagementService ClubManagementService
+
+<PageTitle>Регистрация гостя</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1>Регистрация гостя</h1>
+        <p class="text-muted mb-0">Создание локальной карточки посетителя компьютерного клуба.</p>
+    </div>
+
+    <a class="btn btn-outline-secondary" href="club-management">К управлению клубом</a>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(notification))
+{
+    <div class="alert alert-info">@notification</div>
+}
+
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="h5 mb-3">Данные гостя</h2>
+
+                <div class="mb-3">
+                    <label class="form-label" for="firstName">Имя</label>
+                    <input class="form-control" id="firstName" @bind="firstName" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="lastName">Фамилия</label>
+                    <input class="form-control" id="lastName" @bind="lastName" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="phone">Телефон</label>
+                    <input class="form-control" id="phone" placeholder="+7 900 000-00-00" @bind="phoneNumber" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="email">Email</label>
+                    <input class="form-control" id="email" type="email" @bind="email" />
+                </div>
+
+                <button class="btn btn-primary" type="button" @onclick="RegisterClientAsync">Зарегистрировать</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string firstName = string.Empty;
+    private string lastName = string.Empty;
+    private string? phoneNumber;
+    private string? email;
+    private string? notification;
+
+    private async Task RegisterClientAsync()
+    {
+        if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
+        {
+            notification = "Укажите имя и фамилию гостя.";
+            return;
+        }
+
+        await ClubManagementService.RegisterClientAsync(firstName, lastName, phoneNumber, email);
+
+        firstName = string.Empty;
+        lastName = string.Empty;
+        phoneNumber = null;
+        email = null;
+        notification = "Гость зарегистрирован.";
+    }
+}

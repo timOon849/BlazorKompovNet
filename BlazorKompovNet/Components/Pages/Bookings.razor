@@ -1,0 +1,413 @@
+@page "/bookings"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IClubManagementService ClubManagementService
+
+<PageTitle>Бронирования</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1>Бронирования</h1>
+        <p class="text-muted mb-0">Создание, контроль и история броней на компьютеры клуба.</p>
+    </div>
+
+    <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="button" @onclick="OpenCreateDialog">Создать бронь</button>
+        <button class="btn btn-outline-primary" type="button" @onclick="LoadDataAsync">Обновить</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(notification))
+{
+    <div class="alert alert-info">@notification</div>
+}
+
+@if (bookings is null)
+{
+    <p><em>Загрузка данных...</em></p>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Открытые</p>
+                    <h2 class="h3 mb-0">@FilteredBookings.Count(IsOpenBooking)</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Сегодня</p>
+                    <h2 class="h3 mb-0">@FilteredBookings.Count(booking => booking.StartsAt.Date == DateTime.Today)</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Неявки</p>
+                    <h2 class="h3 mb-0">@FilteredBookings.Count(booking => booking.Status == BookingStatus.NoShow)</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Всего</p>
+                    <h2 class="h3 mb-0">@FilteredBookings.Count()</h2>
+                    <p class="small text-muted mb-0">В истории: @bookings.Count</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-lg-5">
+                    <label class="form-label" for="bookingSearch">Поиск</label>
+                    <input class="form-control"
+                           id="bookingSearch"
+                           placeholder="Клиент, телефон, компьютер или зона"
+                           @bind="searchText"
+                           @bind:event="oninput" />
+                </div>
+
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label" for="bookingStatus">Статус</label>
+                    <select class="form-select" id="bookingStatus" @bind="statusFilter">
+                        <option value="">Все</option>
+                        @foreach (var status in Enum.GetValues<BookingStatus>())
+                        {
+                            <option value="@status">@GetBookingStatusText(status)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-md-4 col-lg-2">
+                    <label class="form-label" for="bookingDate">Дата</label>
+                    <select class="form-select" id="bookingDate" @bind="dateFilter">
+                        <option value="">Все</option>
+                        <option value="Today">Сегодня</option>
+                        <option value="Future">Будущие</option>
+                        <option value="Past">Прошедшие</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4 col-lg-2 d-flex align-items-end">
+                    <button class="btn btn-outline-secondary w-100" type="button" @onclick="ResetFilters">Сбросить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            @if (!FilteredBookings.Any())
+            {
+                <p class="text-muted mb-0">Броней по выбранным фильтрам нет.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Время</th>
+                                <th>Клиент</th>
+                                <th>Компьютер</th>
+                                <th>Статус</th>
+                                <th>Создал</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var booking in FilteredBookings)
+                            {
+                                <tr>
+                                    <td>
+                                        <strong>@booking.StartsAt.ToString("dd.MM.yyyy HH:mm")</strong>
+                                        <div class="text-muted small">до @booking.EndsAt.ToString("HH:mm")</div>
+                                    </td>
+                                    <td>
+                                        <a href="@($"/clients/{booking.ClientId}")">@GetClientName(booking.Client)</a>
+                                        <div class="text-muted small">@(booking.Client?.PhoneNumber ?? "-")</div>
+                                    </td>
+                                    <td>
+                                        <strong>@(booking.Computer?.Name ?? "-")</strong>
+                                        <div class="text-muted small">@(booking.Zone?.Name ?? booking.Computer?.Zone?.Name ?? "-")</div>
+                                    </td>
+                                    <td><span class="badge @GetBookingStatusBadgeClass(booking.Status)">@GetBookingStatusText(booking.Status)</span></td>
+                                    <td>@(booking.CreatedByCashier?.FullName ?? "-")</td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-secondary"
+                                                    type="button"
+                                                    disabled="@(!IsOpenBooking(booking))"
+                                                    @onclick="() => CancelBookingAsync(booking.Id)">
+                                                Отменить
+                                            </button>
+                                            <button class="btn btn-outline-danger"
+                                                    type="button"
+                                                    disabled="@(!IsOpenBooking(booking))"
+                                                    @onclick="() => MarkNoShowAsync(booking.Id)">
+                                                Не пришел
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (showCreateDialog)
+{
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0, 0, 0, .45);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5">Создать бронь</h2>
+                    <button type="button" class="btn-close" aria-label="Закрыть" @onclick="CloseCreateDialog"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="bookingClient">Клиент</label>
+                            <select class="form-select" id="bookingClient" @bind="selectedClientId">
+                                @foreach (var client in clients)
+                                {
+                                    <option value="@client.Id">@GetClientName(client) (@FormatMoney(client.Balance))</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="bookingComputer">Компьютер</label>
+                            <select class="form-select" id="bookingComputer" @bind="selectedComputerId">
+                                @foreach (var computer in AvailableComputers)
+                                {
+                                    <option value="@computer.Id">@computer.Name - @computer.Zone?.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="bookingStart">Начало</label>
+                            <input class="form-control" id="bookingStart" type="datetime-local" value="@startsAtText" @onchange="SetStartsAt" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="bookingEnd">Окончание</label>
+                            <input class="form-control" id="bookingEnd" type="datetime-local" value="@endsAtText" @onchange="SetEndsAt" />
+                        </div>
+                    </div>
+
+                    <div class="alert alert-light border mt-3 mb-0">
+                        Бронь проверит пересечения по компьютеру и активные сессии перед созданием.
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseCreateDialog">Отмена</button>
+                    <button type="button" class="btn btn-primary" disabled="@(!CanCreateBooking)" @onclick="CreateBookingAsync">Создать бронь</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<Booking>? bookings;
+    private IReadOnlyList<Client> clients = [];
+    private IReadOnlyList<ComputerZone> zones = [];
+    private string? searchText;
+    private string? statusFilter;
+    private string? dateFilter;
+    private string? notification;
+    private bool showCreateDialog;
+    private int selectedClientId;
+    private int selectedComputerId;
+    private string startsAtText = string.Empty;
+    private string endsAtText = string.Empty;
+
+    private IEnumerable<Booking> FilteredBookings => bookings?
+        .Where(MatchesFilters)
+        .OrderByDescending(booking => booking.StartsAt)
+        ?? Enumerable.Empty<Booking>();
+
+    private IEnumerable<Computer> AvailableComputers => zones
+        .SelectMany(zone => zone.Computers)
+        .Where(computer => computer.Status?.Code is not ComputerStatusCodes.Maintenance and not ComputerStatusCodes.Disabled)
+        .OrderBy(computer => computer.Name);
+
+    private bool CanCreateBooking =>
+        selectedClientId != 0 &&
+        selectedComputerId != 0 &&
+        DateTime.TryParse(startsAtText, out _) &&
+        DateTime.TryParse(endsAtText, out _);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        bookings = await ClubManagementService.GetBookingsAsync();
+        clients = await ClubManagementService.GetClientsAsync();
+        zones = await ClubManagementService.GetZonesAsync();
+    }
+
+    private void OpenCreateDialog()
+    {
+        selectedClientId = clients.FirstOrDefault()?.Id ?? 0;
+        selectedComputerId = AvailableComputers.FirstOrDefault()?.Id ?? 0;
+        startsAtText = DateTime.Now.AddMinutes(30).ToString("yyyy-MM-ddTHH:mm");
+        endsAtText = DateTime.Now.AddHours(2).ToString("yyyy-MM-ddTHH:mm");
+        showCreateDialog = true;
+    }
+
+    private void CloseCreateDialog()
+    {
+        showCreateDialog = false;
+    }
+
+    private async Task CreateBookingAsync()
+    {
+        if (!DateTime.TryParse(startsAtText, out var startsAt) || !DateTime.TryParse(endsAtText, out var endsAt))
+        {
+            notification = "Укажите корректное время бронирования.";
+            return;
+        }
+
+        var result = await ClubManagementService.CreateBookingAsync(selectedClientId, selectedComputerId, startsAt, endsAt);
+        notification = result.Message;
+
+        if (result.Succeeded)
+        {
+            CloseCreateDialog();
+        }
+
+        await LoadDataAsync();
+    }
+
+    private async Task CancelBookingAsync(int bookingId)
+    {
+        var result = await ClubManagementService.CancelBookingAsync(bookingId);
+        notification = result.Message;
+        await LoadDataAsync();
+    }
+
+    private async Task MarkNoShowAsync(int bookingId)
+    {
+        var result = await ClubManagementService.MarkBookingNoShowAsync(bookingId);
+        notification = result.Message;
+        await LoadDataAsync();
+    }
+
+    private bool MatchesFilters(Booking booking)
+    {
+        if (!string.IsNullOrWhiteSpace(statusFilter) && booking.Status.ToString() != statusFilter)
+        {
+            return false;
+        }
+
+        if (!MatchesDateFilter(booking))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            return true;
+        }
+
+        var search = searchText.Trim();
+        return GetClientName(booking.Client).Contains(search, StringComparison.OrdinalIgnoreCase)
+            || (booking.Client?.PhoneNumber?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (booking.Computer?.Name?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (booking.Zone?.Name?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (booking.Computer?.Zone?.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private bool MatchesDateFilter(Booking booking)
+    {
+        return dateFilter switch
+        {
+            "Today" => booking.StartsAt.Date == DateTime.Today,
+            "Future" => booking.StartsAt >= DateTime.Now,
+            "Past" => booking.EndsAt < DateTime.Now,
+            _ => true
+        };
+    }
+
+    private void ResetFilters()
+    {
+        searchText = null;
+        statusFilter = null;
+        dateFilter = null;
+    }
+
+    private void SetStartsAt(ChangeEventArgs args)
+    {
+        startsAtText = args.Value?.ToString() ?? string.Empty;
+    }
+
+    private void SetEndsAt(ChangeEventArgs args)
+    {
+        endsAtText = args.Value?.ToString() ?? string.Empty;
+    }
+
+    private static bool IsOpenBooking(Booking booking)
+    {
+        return booking.Status is BookingStatus.Created or BookingStatus.Active;
+    }
+
+    private static string GetClientName(Client? client)
+    {
+        return client is null ? "-" : $"{client.FirstName} {client.LastName}";
+    }
+
+    private static string GetBookingStatusText(BookingStatus status)
+    {
+        return status switch
+        {
+            BookingStatus.Created => "Создана",
+            BookingStatus.Active => "Активна",
+            BookingStatus.Completed => "Завершена",
+            BookingStatus.Cancelled => "Отменена",
+            BookingStatus.NoShow => "Неявка",
+            _ => status.ToString()
+        };
+    }
+
+    private static string GetBookingStatusBadgeClass(BookingStatus status)
+    {
+        return status switch
+        {
+            BookingStatus.Created => "text-bg-warning",
+            BookingStatus.Active => "text-bg-primary",
+            BookingStatus.Completed => "text-bg-success",
+            BookingStatus.Cancelled => "text-bg-secondary",
+            BookingStatus.NoShow => "text-bg-danger",
+            _ => "text-bg-light"
+        };
+    }
+
+    private static string FormatMoney(decimal value)
+    {
+        return $"{value:N0} ₽";
+    }
+}

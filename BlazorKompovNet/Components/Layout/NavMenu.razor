@@ -1,0 +1,76 @@
+﻿<input type="checkbox" id="sidebarCollapseToggle" class="sidebar-collapse-toggle" />
+
+<div class="top-row ps-3 pe-2 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="" title="KompovNet">
+            <img class="brand-logo" src="kompovnet-logo.png" alt="" aria-hidden="true" />
+        </a>
+
+        <label class="sidebar-collapse-button" for="sidebarCollapseToggle" title="Свернуть меню">
+            <span class="collapse-open">‹</span>
+            <span class="collapse-closed">›</span>
+        </label>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span>
+                <span class="nav-label">Панель управления</span>
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="club-management">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                <span class="nav-label">Управление клубом</span>
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="transactions">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                <span class="nav-label">Транзакции</span>
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="cashier-shifts">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                <span class="nav-label">Кассовые смены</span>
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="sessions">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                <span class="nav-label">Игровые сессии</span>
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="clients">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                <span class="nav-label">Клиенты</span>
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="bookings">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                <span class="nav-label">Бронирования</span>
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="clients/register">
+                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span>
+                <span class="nav-label">Регистрация гостя</span>
+            </NavLink>
+        </div>
+    </nav>
+</div>
