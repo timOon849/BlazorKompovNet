@@ -45,7 +45,7 @@ else
                 <div class="card-body">
                     <p class="text-muted mb-1">Сессии</p>
                     <h2 class="h3 mb-0">@ClientSessions.Count()</h2>
-                    <p class="small text-muted mb-0">Активных: @ClientSessions.Count(session => session.Status == "Active")</p>
+                    <p class="small text-muted mb-0">Активных: @ClientSessions.Count(ModelLabels.IsSessionActive)</p>
                 </div>
             </div>
         </div>
@@ -64,7 +64,8 @@ else
             <div class="card h-100">
                 <div class="card-body">
                     <p class="text-muted mb-1">Оборот</p>
-                    <h2 class="h3 mb-0">@FormatMoney(ClientTransactions.Sum(transaction => transaction.Amount))</h2>
+                    <h2 class="h3 mb-0">@FormatMoney(ClientTransactions.Where(t => !ModelLabels.IsSessionCharge(t.Type)).Sum(t => t.Amount))</h2>
+                    <p class="small text-muted mb-0">Пополнения без списаний за сессии</p>
                 </div>
             </div>
         </div>
@@ -88,7 +89,7 @@ else
 
                         <dt class="col-sm-4">Статус</dt>
                         <dd class="col-sm-8">
-                            @if (ClientSessions.Any(session => session.Status == "Active"))
+                            @if (ClientSessions.Any(ModelLabels.IsSessionActive))
                             {
                                 <span class="badge text-bg-primary">Сейчас играет</span>
                             }
@@ -128,9 +129,9 @@ else
                                     {
                                         <tr>
                                             <td>@transaction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
-                                            <td>@GetTransactionTypeText(transaction.Type)</td>
+                                            <td>@ModelLabels.GetTransactionTypeText(transaction.Type)</td>
                                             <td>@(transaction.PaymentType?.Name ?? "-")</td>
-                                            <td class="text-end">@FormatMoney(transaction.Amount)</td>
+                                            <td class="text-end">@ModelLabels.FormatTransactionAmount(transaction)</td>
                                             <td class="text-end">
                                                 <a class="btn btn-sm btn-outline-primary" href="@($"/transactions/{transaction.Id}")">Открыть</a>
                                             </td>
@@ -173,7 +174,7 @@ else
                                         <tr>
                                             <td>@session.StartedAt.ToString("dd.MM.yyyy HH:mm")</td>
                                             <td>@(session.Computer?.Name ?? "-")</td>
-                                            <td><span class="badge @GetSessionStatusBadgeClass(session.Status)">@GetSessionStatusText(session.Status)</span></td>
+                                            <td><span class="badge @ModelLabels.GetSessionStatusBadgeClass(ModelLabels.GetSessionDisplayKey(session))">@ModelLabels.GetSessionStatusText(session)</span></td>
                                             <td class="text-end">@FormatMoney(session.TotalPrice)</td>
                                             <td class="text-end">
                                                 <a class="btn btn-sm btn-outline-primary" href="@($"/sessions/{session.Id}")">Открыть</a>
@@ -270,38 +271,6 @@ else
     private static string GetClientName(Client client)
     {
         return $"{client.FirstName} {client.LastName}";
-    }
-
-    private static string GetTransactionTypeText(string type)
-    {
-        return type switch
-        {
-            "BalanceTopUp" => "Пополнение баланса",
-            "BonusAccrual" => "Бонусное пополнение",
-            "SessionStart" => "Старт сессии",
-            "SessionExtension" => "Продление сессии",
-            _ => type
-        };
-    }
-
-    private static string GetSessionStatusText(string status)
-    {
-        return status switch
-        {
-            "Active" => "Активна",
-            "Completed" => "Завершена",
-            _ => status
-        };
-    }
-
-    private static string GetSessionStatusBadgeClass(string status)
-    {
-        return status switch
-        {
-            "Active" => "text-bg-primary",
-            "Completed" => "text-bg-success",
-            _ => "text-bg-secondary"
-        };
     }
 
     private static string GetBookingStatusText(BookingStatus status)

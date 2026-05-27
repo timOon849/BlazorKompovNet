@@ -4,8 +4,11 @@ namespace BlazorKompovNet.Services;
 
 public sealed class LocalClubManagementService : IClubManagementService
 {
+    private const decimal MaxHourlyDuration = 24m;
+
+    private readonly ICashierRepository cashierRepository;
     private readonly object syncRoot = new();
-    private readonly Club club = new() { Id = 1, Name = "KompovNet", Address = "Локальный клуб" };
+    private readonly Club club = new() { Id = 1, Name = "KompovNet", Address = "ул. Ленина, 15" };
     private readonly List<ComputerStatus> computerStatuses;
     private readonly List<PaymentType> paymentTypes;
     private readonly List<ComputerZone> zones;
@@ -14,20 +17,24 @@ public sealed class LocalClubManagementService : IClubManagementService
     private readonly List<Booking> bookings = [];
     private readonly List<Transaction> transactions = [];
     private readonly List<GameSession> sessions = [];
+    private readonly List<SessionExtension> sessionExtensions = [];
     private readonly List<CashierShift> cashierShifts = [];
     private int nextClientId = 4;
     private int nextBookingId = 2;
-    private int nextShiftId = 1;
+    private int nextShiftId = 3;
     private int nextTransactionId = 1;
     private int nextSessionId = 1;
+    private int nextSessionExtensionId = 1;
 
-    public LocalClubManagementService()
+    public LocalClubManagementService(ICashierRepository cashierRepository)
     {
+        this.cashierRepository = cashierRepository;
+
         computerStatuses =
         [
             new() { Id = 1, Code = ComputerStatusCodes.Available, Name = "Свободен", CanStartSession = true },
             new() { Id = 2, Code = ComputerStatusCodes.Busy, Name = "Занят", CanStartSession = false },
-            new() { Id = 3, Code = ComputerStatusCodes.Reserved, Name = "Бронь", CanStartSession = true },
+            new() { Id = 3, Code = ComputerStatusCodes.Reserved, Name = "Бронь", CanStartSession = false },
             new() { Id = 4, Code = ComputerStatusCodes.Maintenance, Name = "Ремонт", CanStartSession = false },
             new() { Id = 5, Code = ComputerStatusCodes.Disabled, Name = "Выключен", CanStartSession = false }
         ];
@@ -118,13 +125,22 @@ public sealed class LocalClubManagementService : IClubManagementService
                 Computer = reservedComputer,
                 ZoneId = reservedComputer.ZoneId,
                 Zone = reservedComputer.Zone,
-                StartsAt = DateTime.Now.AddMinutes(-15),
-                EndsAt = DateTime.Now.AddHours(2),
-                Status = BookingStatus.Active
+                StartsAt = DateTime.Today.AddHours(10),
+                EndsAt = DateTime.Today.AddHours(14),
+                Status = DateTime.Now >= DateTime.Today.AddHours(10) && DateTime.Now < DateTime.Today.AddHours(14)
+                    ? BookingStatus.Active
+                    : BookingStatus.Created
             };
 
-            bookings.Add(booking);
-            bookingClient.Bookings.Add(booking);
+            if (DateTime.Now < booking.EndsAt)
+            {
+                bookings.Add(booking);
+                bookingClient.Bookings.Add(booking);
+            }
+            else
+            {
+                SetComputerStatus(reservedComputer, ComputerStatusCodes.Available);
+            }
         }
 
         tariffs =
@@ -135,12 +151,15 @@ public sealed class LocalClubManagementService : IClubManagementService
             CreateTariff(4, "30 минут", "Короткое продление или старт на полчаса", TimeSpan.FromMinutes(30), false, [150, 250, 350])
         ];
 
+        SeedClosedShifts();
+        RefreshBookingStatuses();
     }
 
     public Task<IReadOnlyList<ComputerZone>> GetZonesAsync()
     {
         lock (syncRoot)
         {
+            RefreshBookingStatuses();
             return Task.FromResult<IReadOnlyList<ComputerZone>>(zones);
         }
     }
@@ -193,7 +212,7 @@ public sealed class LocalClubManagementService : IClubManagementService
     {
         lock (syncRoot)
         {
-            return Task.FromResult<IReadOnlyList<GameSession>>(sessions.Where(session => session.Status == "Active").ToList());
+            return Task.FromResult<IReadOnlyList<GameSession>>(sessions.Where(session => session.Status == GameSessionStatus.Active).ToList());
         }
     }
 
@@ -204,7 +223,9 @@ public sealed class LocalClubManagementService : IClubManagementService
             RefreshBookingStatuses();
             var now = DateTime.Now;
             return Task.FromResult<IReadOnlyList<Booking>>(bookings
-                .Where(booking => (booking.Status is BookingStatus.Created or BookingStatus.Active) && booking.EndsAt >= now)
+                .Where(booking =>
+                    (booking.Status is BookingStatus.Created or BookingStatus.Active) &&
+                    booking.EndsAt > now)
                 .OrderBy(booking => booking.StartsAt)
                 .ToList());
         }
@@ -244,7 +265,25 @@ public sealed class LocalClubManagementService : IClubManagementService
     {
         lock (syncRoot)
         {
-            return Task.FromResult(sessions.FirstOrDefault(session => session.Id == sessionId));
+            var session = sessions.FirstOrDefault(session => session.Id == sessionId);
+            if (session is not null)
+            {
+                AttachSessionExtensions(session);
+                AttachSessionTransactions(session);
+            }
+
+            return Task.FromResult(session);
+        }
+    }
+
+    public Task<IReadOnlyList<SessionExtension>> GetSessionExtensionsAsync(int sessionId)
+    {
+        lock (syncRoot)
+        {
+            return Task.FromResult<IReadOnlyList<SessionExtension>>(sessionExtensions
+                .Where(extension => extension.GameSessionId == sessionId)
+                .OrderBy(extension => extension.CreatedAt)
+                .ToList());
         }
     }
 
@@ -292,39 +331,55 @@ public sealed class LocalClubManagementService : IClubManagementService
         }
     }
 
-    public Task RegisterClientAsync(string firstName, string lastName, string? phoneNumber, string? email)
+    public Task<ClubOperationResult> RegisterClientAsync(string firstName, string lastName, string? phoneNumber, string? email)
     {
         lock (syncRoot)
         {
+            if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
+            {
+                return Task.FromResult(ClubOperationResult.Failure("Укажите имя и фамилию гостя."));
+            }
+
+            var normalizedPhone = string.IsNullOrWhiteSpace(phoneNumber) ? null : phoneNumber.Trim();
+            if (normalizedPhone is not null &&
+                clients.Any(client => string.Equals(client.PhoneNumber, normalizedPhone, StringComparison.OrdinalIgnoreCase)))
+            {
+                return Task.FromResult(ClubOperationResult.Failure("Клиент с таким телефоном уже зарегистрирован."));
+            }
+
             clients.Add(new Client
             {
                 Id = nextClientId++,
                 FirstName = firstName.Trim(),
                 LastName = lastName.Trim(),
-                PhoneNumber = string.IsNullOrWhiteSpace(phoneNumber) ? null : phoneNumber.Trim(),
+                PhoneNumber = normalizedPhone,
                 Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim(),
                 RegisteredAt = DateTime.UtcNow
             });
-        }
 
-        return Task.CompletedTask;
+            return Task.FromResult(ClubOperationResult.Success("Гость зарегистрирован."));
+        }
     }
 
-    public Task<ClubOperationResult> OpenShiftAsync(int cashierId, decimal openingCashAmount)
+    public async Task<ClubOperationResult> OpenShiftAsync(int cashierId, decimal openingCashAmount)
     {
+        var cashier = await cashierRepository.GetByIdAsync(cashierId);
+        if (cashier is null)
+        {
+            return ClubOperationResult.Failure("Кассир не найден.");
+        }
+
         lock (syncRoot)
         {
             if (GetOpenShift() is not null)
             {
-                return Task.FromResult(ClubOperationResult.Failure("Кассовая смена уже открыта."));
+                return ClubOperationResult.Failure("Кассовая смена уже открыта.");
             }
 
             if (openingCashAmount < 0)
             {
-                return Task.FromResult(ClubOperationResult.Failure("Сумма в кассе не может быть отрицательной."));
+                return ClubOperationResult.Failure("Сумма в кассе не может быть отрицательной.");
             }
-
-            var cashier = CreateCashier(cashierId);
             var shift = new CashierShift
             {
                 Id = nextShiftId++,
@@ -339,7 +394,7 @@ public sealed class LocalClubManagementService : IClubManagementService
 
             cashierShifts.Add(shift);
 
-            return Task.FromResult(ClubOperationResult.Success($"Смена #{shift.Id} открыта."));
+            return ClubOperationResult.Success($"Смена #{shift.Id} открыта.");
         }
     }
 
@@ -356,6 +411,11 @@ public sealed class LocalClubManagementService : IClubManagementService
             if (!shift.IsOpen)
             {
                 return Task.FromResult(ClubOperationResult.Failure("Эта смена уже закрыта."));
+            }
+
+            if (sessions.Any(session => session.Status == GameSessionStatus.Active && session.CashierShiftId == shift.Id))
+            {
+                return Task.FromResult(ClubOperationResult.Failure("Завершите все активные сессии текущей смены перед закрытием."));
             }
 
             if (closingCashAmount < 0)
@@ -398,7 +458,7 @@ public sealed class LocalClubManagementService : IClubManagementService
             }
 
             client.Balance += amount;
-            AddTransaction(client, paymentType, amount, paymentType.IsBonus ? "BonusAccrual" : "BalanceTopUp", currentShift);
+            AddTransaction(client, paymentType, amount, paymentType.IsBonus ? TransactionType.BonusAccrual : TransactionType.BalanceTopUp, currentShift);
 
             return Task.FromResult(ClubOperationResult.Success("Баланс посетителя пополнен."));
         }
@@ -428,9 +488,9 @@ public sealed class LocalClubManagementService : IClubManagementService
                 return Task.FromResult(ClubOperationResult.Failure("Компьютер не найден."));
             }
 
-            if (computer.Status?.Code is ComputerStatusCodes.Maintenance or ComputerStatusCodes.Disabled)
+            if (computer.Status?.Code is ComputerStatusCodes.Maintenance or ComputerStatusCodes.Disabled or ComputerStatusCodes.Busy)
             {
-                return Task.FromResult(ClubOperationResult.Failure("Нельзя создать бронь на компьютер в ремонте или выключенном состоянии."));
+                return Task.FromResult(ClubOperationResult.Failure("Нельзя создать бронь на занятом, выключенном или ремонтируемом компьютере."));
             }
 
             if (endsAt <= startsAt)
@@ -443,7 +503,7 @@ public sealed class LocalClubManagementService : IClubManagementService
                 return Task.FromResult(ClubOperationResult.Failure("Нельзя создать бронь в прошлом."));
             }
 
-            if (sessions.Any(session => session.Status == "Active" && session.ComputerId == computer.Id))
+            if (sessions.Any(session => session.Status == GameSessionStatus.Active && session.ComputerId == computer.Id))
             {
                 return Task.FromResult(ClubOperationResult.Failure("На выбранном компьютере уже идет активная сессия."));
             }
@@ -528,12 +588,13 @@ public sealed class LocalClubManagementService : IClubManagementService
                 return Task.FromResult(ClubOperationResult.Failure("Тариф не найден или отключен."));
             }
 
-            if (computer.Status?.CanStartSession != true)
+            var startValidation = ValidateSessionStart(computer, clientId);
+            if (startValidation is not null)
             {
-                return Task.FromResult(ClubOperationResult.Failure("На выбранном компьютере нельзя начать сессию."));
+                return Task.FromResult(startValidation);
             }
 
-            if (sessions.Any(session => session.Status == "Active" && session.ClientId == client.Id))
+            if (sessions.Any(session => session.Status == GameSessionStatus.Active && session.ClientId == client.Id))
             {
                 return Task.FromResult(ClubOperationResult.Failure("Этот посетитель уже находится за другим компьютером."));
             }
@@ -544,11 +605,12 @@ public sealed class LocalClubManagementService : IClubManagementService
                 return Task.FromResult(ClubOperationResult.Failure("Для выбранной зоны не указана цена тарифа."));
             }
 
+            var billedHours = tariff.IsHourly ? Math.Clamp(hours, 0.5m, MaxHourlyDuration) : 0m;
             var duration = tariff.IsHourly
-                ? TimeSpan.FromHours((double)Math.Max(hours, 0.5m))
+                ? TimeSpan.FromHours((double)billedHours)
                 : tariff.Duration;
             var totalPrice = tariff.IsHourly
-                ? tariffZone.Price * Math.Max(hours, 0.5m)
+                ? tariffZone.Price * billedHours
                 : tariffZone.Price;
 
             if (client.Balance < totalPrice)
@@ -581,7 +643,7 @@ public sealed class LocalClubManagementService : IClubManagementService
 
             SetComputerStatus(computer, ComputerStatusCodes.Busy);
             client.Balance -= totalPrice;
-            AddBalanceTransaction(client, totalPrice, "SessionStart", session, currentShift);
+            AddBalanceTransaction(client, totalPrice, TransactionType.SessionStart, session, currentShift);
             CompleteActiveBooking(computer.Id, client.Id);
 
             return Task.FromResult(ClubOperationResult.Success($"Сессия на {computer.Name} запущена."));
@@ -598,7 +660,7 @@ public sealed class LocalClubManagementService : IClubManagementService
                 return Task.FromResult(ClubOperationResult.Failure("Откройте кассовую смену перед выполнением операции."));
             }
 
-            var session = sessions.FirstOrDefault(session => session.Id == sessionId && session.Status == "Active");
+            var session = sessions.FirstOrDefault(session => session.Id == sessionId && session.Status == GameSessionStatus.Active);
             var tariff = tariffs.FirstOrDefault(tariff => tariff.Id == tariffId && tariff.IsActive);
 
             if (session is null)
@@ -623,11 +685,12 @@ public sealed class LocalClubManagementService : IClubManagementService
                 return Task.FromResult(ClubOperationResult.Failure("Для зоны компьютера не указана цена тарифа."));
             }
 
+            var billedHours = tariff.IsHourly ? Math.Clamp(hours, 0.5m, MaxHourlyDuration) : 0m;
             var duration = tariff.IsHourly
-                ? TimeSpan.FromHours((double)Math.Max(hours, 0.5m))
+                ? TimeSpan.FromHours((double)billedHours)
                 : tariff.Duration;
             var price = tariff.IsHourly
-                ? tariffZone.Price * Math.Max(hours, 0.5m)
+                ? tariffZone.Price * billedHours
                 : tariffZone.Price;
 
             if (client.Balance < price)
@@ -638,7 +701,8 @@ public sealed class LocalClubManagementService : IClubManagementService
             client.Balance -= price;
             session.PlannedEndAt = session.PlannedEndAt.Add(duration);
             session.TotalPrice += price;
-            AddBalanceTransaction(client, price, "SessionExtension", session, currentShift);
+            AddBalanceTransaction(client, price, TransactionType.SessionExtension, session, currentShift);
+            RecordSessionExtension(session, tariff, (int)duration.TotalMinutes, price, $"Продление: {tariff.Name}");
 
             return Task.FromResult(ClubOperationResult.Success("Сеанс продлен по выбранному тарифу."));
         }
@@ -648,7 +712,12 @@ public sealed class LocalClubManagementService : IClubManagementService
     {
         lock (syncRoot)
         {
-            var session = sessions.FirstOrDefault(session => session.Id == sessionId && session.Status == "Active");
+            if (GetOpenShift() is null)
+            {
+                return Task.FromResult(ClubOperationResult.Failure("Откройте кассовую смену перед выполнением операции."));
+            }
+
+            var session = sessions.FirstOrDefault(session => session.Id == sessionId && session.Status == GameSessionStatus.Active);
             if (session is null)
             {
                 return Task.FromResult(ClubOperationResult.Failure("Активный сеанс не найден."));
@@ -666,36 +735,48 @@ public sealed class LocalClubManagementService : IClubManagementService
 
             var duration = TimeSpan.FromHours((double)hours);
             session.PlannedEndAt = session.PlannedEndAt.Add(duration);
+            RecordSessionExtension(session, null, (int)duration.TotalMinutes, 0, reason.Trim());
 
             return Task.FromResult(ClubOperationResult.Success("Время добавлено к сеансу."));
         }
     }
 
-    public Task TurnOnComputerAsync(int computerId)
+    public Task<ClubOperationResult> TurnOnComputerAsync(int computerId)
     {
         lock (syncRoot)
         {
             var computer = FindComputer(computerId);
-            if (computer is not null && computer.Status?.Code == ComputerStatusCodes.Disabled)
+            if (computer is null)
             {
-                SetComputerStatus(computer, ComputerStatusCodes.Available);
+                return Task.FromResult(ClubOperationResult.Failure("Компьютер не найден."));
             }
-        }
 
-        return Task.CompletedTask;
+            if (HasActiveSessionOnComputer(computerId))
+            {
+                return Task.FromResult(ClubOperationResult.Failure("Сначала завершите активную сессию на этом компьютере."));
+            }
+
+            if (computer.Status?.Code != ComputerStatusCodes.Disabled)
+            {
+                return Task.FromResult(ClubOperationResult.Failure("Компьютер уже включен."));
+            }
+
+            SetComputerStatus(computer, ComputerStatusCodes.Available);
+            return Task.FromResult(ClubOperationResult.Success("Компьютер включен."));
+        }
     }
 
     public Task<ClubOperationResult> CompleteSessionAsync(int sessionId)
     {
         lock (syncRoot)
         {
-            var session = sessions.FirstOrDefault(session => session.Id == sessionId && session.Status == "Active");
+            var session = sessions.FirstOrDefault(session => session.Id == sessionId && session.Status == GameSessionStatus.Active);
             if (session is null)
             {
                 return Task.FromResult(ClubOperationResult.Failure("Активный сеанс не найден."));
             }
 
-            session.Status = "Completed";
+            session.Status = GameSessionStatus.Completed;
             session.EndedAt = DateTime.Now;
 
             var computer = FindComputer(session.ComputerId);
@@ -704,36 +785,61 @@ public sealed class LocalClubManagementService : IClubManagementService
                 SetComputerStatus(computer, ComputerStatusCodes.Available);
             }
 
+            FinalizeSessionBookings(session);
+
             return Task.FromResult(ClubOperationResult.Success("Сеанс завершен."));
         }
     }
 
-    public Task TurnOffComputerAsync(int computerId)
+    public Task<ClubOperationResult> TurnOffComputerAsync(int computerId)
     {
         lock (syncRoot)
         {
             var computer = FindComputer(computerId);
-            if (computer is not null)
+            if (computer is null)
             {
-                SetComputerStatus(computer, ComputerStatusCodes.Disabled);
+                return Task.FromResult(ClubOperationResult.Failure("Компьютер не найден."));
             }
-        }
 
-        return Task.CompletedTask;
+            if (HasActiveSessionOnComputer(computerId))
+            {
+                return Task.FromResult(ClubOperationResult.Failure("Сначала завершите активную сессию на этом компьютере."));
+            }
+
+            SetComputerStatus(computer, ComputerStatusCodes.Disabled);
+            return Task.FromResult(ClubOperationResult.Success("Компьютер выключен."));
+        }
     }
 
-    public Task RestartComputerAsync(int computerId)
+    public Task<ClubOperationResult> RestartComputerAsync(int computerId)
     {
         lock (syncRoot)
         {
             var computer = FindComputer(computerId);
-            if (computer is not null && computer.Status?.Code != ComputerStatusCodes.Disabled)
+            if (computer is null)
             {
-                SetComputerStatus(computer, ComputerStatusCodes.Available);
+                return Task.FromResult(ClubOperationResult.Failure("Компьютер не найден."));
             }
-        }
 
-        return Task.CompletedTask;
+            if (HasActiveSessionOnComputer(computerId))
+            {
+                return Task.FromResult(ClubOperationResult.Failure("Сначала завершите активную сессию на этом компьютере."));
+            }
+
+            if (computer.Status?.Code == ComputerStatusCodes.Disabled)
+            {
+                return Task.FromResult(ClubOperationResult.Failure("Сначала включите компьютер."));
+            }
+
+            if (computer.Status?.Code == ComputerStatusCodes.Busy)
+            {
+                return Task.FromResult(ClubOperationResult.Failure("Нельзя перезагрузить занятый компьютер."));
+            }
+
+            SetComputerStatus(computer, ComputerStatusCodes.Available);
+            ReleaseComputerReservationIfNeeded(computerId);
+            return Task.FromResult(ClubOperationResult.Success("Компьютер перезагружен."));
+        }
     }
 
     private Computer? FindComputer(int computerId)
@@ -829,6 +935,11 @@ public sealed class LocalClubManagementService : IClubManagementService
             return ClubOperationResult.Failure("Эта бронь уже закрыта.");
         }
 
+        if (status == BookingStatus.NoShow && booking.StartsAt > DateTime.Now)
+        {
+            return ClubOperationResult.Failure("Нельзя отметить неявку до начала брони.");
+        }
+
         booking.Status = status;
         ReleaseComputerReservationIfNeeded(booking.ComputerId);
 
@@ -838,9 +949,23 @@ public sealed class LocalClubManagementService : IClubManagementService
     private void RefreshBookingStatuses()
     {
         var now = DateTime.Now;
-        foreach (var booking in bookings.Where(booking => booking.Status == BookingStatus.Created && booking.StartsAt <= now && booking.EndsAt >= now))
+
+        foreach (var booking in bookings.Where(booking => booking.Status == BookingStatus.Created && booking.StartsAt <= now && booking.EndsAt > now))
         {
             booking.Status = BookingStatus.Active;
+            var computer = FindComputer(booking.ComputerId);
+            if (computer?.Status?.Code == ComputerStatusCodes.Available)
+            {
+                SetComputerStatus(computer, ComputerStatusCodes.Reserved);
+            }
+        }
+
+        foreach (var booking in bookings.Where(booking =>
+                     (booking.Status is BookingStatus.Created or BookingStatus.Active) &&
+                     booking.EndsAt <= now))
+        {
+            booking.Status = BookingStatus.Completed;
+            ReleaseComputerReservationIfNeeded(booking.ComputerId);
         }
     }
 
@@ -851,13 +976,84 @@ public sealed class LocalClubManagementService : IClubManagementService
             booking.ComputerId == computerId &&
             booking.ClientId == clientId &&
             (booking.Status is BookingStatus.Created or BookingStatus.Active) &&
-            booking.EndsAt >= now);
+            booking.StartsAt <= now &&
+            booking.EndsAt > now);
 
         if (booking is not null)
         {
             booking.Status = BookingStatus.Completed;
             ReleaseComputerReservationIfNeeded(computerId);
         }
+    }
+
+    private void FinalizeSessionBookings(GameSession session)
+    {
+        var now = DateTime.Now;
+        foreach (var booking in bookings.Where(booking =>
+                     booking.ComputerId == session.ComputerId &&
+                     booking.ClientId == session.ClientId &&
+                     (booking.Status is BookingStatus.Created or BookingStatus.Active) &&
+                     booking.StartsAt <= now))
+        {
+            booking.Status = BookingStatus.Completed;
+        }
+
+        ReleaseComputerReservationIfNeeded(session.ComputerId);
+    }
+
+    private bool HasActiveSessionOnComputer(int computerId) =>
+        sessions.Any(session => session.Status == GameSessionStatus.Active && session.ComputerId == computerId);
+
+    private ClubOperationResult? ValidateSessionStart(Computer computer, int clientId)
+    {
+        if (HasActiveSessionOnComputer(computer.Id))
+        {
+            return ClubOperationResult.Failure("На выбранном компьютере уже идет активная сессия.");
+        }
+
+        if (computer.Status?.Code is ComputerStatusCodes.Maintenance or ComputerStatusCodes.Disabled)
+        {
+            return ClubOperationResult.Failure("На выбранном компьютере нельзя начать сессию.");
+        }
+
+        if (computer.Status?.Code == ComputerStatusCodes.Busy)
+        {
+            return ClubOperationResult.Failure("Компьютер занят другой сессией.");
+        }
+
+        if (computer.Status?.Code == ComputerStatusCodes.Reserved)
+        {
+            var now = DateTime.Now;
+            var booking = bookings.FirstOrDefault(booking =>
+                booking.ComputerId == computer.Id &&
+                (booking.Status is BookingStatus.Created or BookingStatus.Active) &&
+                booking.StartsAt <= now &&
+                booking.EndsAt > now);
+
+            if (booking is null)
+            {
+                return ClubOperationResult.Failure("Компьютер в статусе брони, но активная бронь не найдена.");
+            }
+
+            if (booking.ClientId != clientId)
+            {
+                return ClubOperationResult.Failure("Этот компьютер забронирован другим посетителем.");
+            }
+        }
+        else if (computer.Status?.CanStartSession != true)
+        {
+            return ClubOperationResult.Failure("На выбранном компьютере нельзя начать сессию.");
+        }
+
+        return null;
+    }
+
+    private void AttachSessionTransactions(GameSession session)
+    {
+        session.Transactions = transactions
+            .Where(transaction => transaction.GameSessionId == session.Id)
+            .OrderByDescending(transaction => transaction.CreatedAt)
+            .ToList();
     }
 
     private void ReleaseComputerReservationIfNeeded(int computerId)
@@ -880,13 +1076,13 @@ public sealed class LocalClubManagementService : IClubManagementService
         }
     }
 
-    private void AddBalanceTransaction(Client client, decimal amount, string type, GameSession? session, CashierShift currentShift)
+    private void AddBalanceTransaction(Client client, decimal amount, TransactionType type, GameSession? session, CashierShift currentShift)
     {
         var balancePaymentType = paymentTypes.First(paymentType => paymentType.Code == "Balance");
         AddTransaction(client, balancePaymentType, amount, type, currentShift, session);
     }
 
-    private void AddTransaction(Client client, PaymentType paymentType, decimal amount, string type, CashierShift currentShift, GameSession? session = null)
+    private void AddTransaction(Client client, PaymentType paymentType, decimal amount, TransactionType type, CashierShift currentShift, GameSession? session = null)
     {
         var transaction = new Transaction
         {
@@ -921,5 +1117,116 @@ public sealed class LocalClubManagementService : IClubManagementService
         var status = computerStatuses.First(computerStatus => computerStatus.Code == statusCode);
         computer.ComputerStatusId = status.Id;
         computer.Status = status;
+    }
+
+    private void RecordSessionExtension(GameSession session, Tariff? tariff, int addedMinutes, decimal amount, string reason)
+    {
+        var extension = new SessionExtension
+        {
+            Id = nextSessionExtensionId++,
+            GameSessionId = session.Id,
+            GameSession = session,
+            TariffId = tariff?.Id,
+            Tariff = tariff,
+            AddedMinutes = addedMinutes,
+            Amount = amount,
+            Reason = reason,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        sessionExtensions.Add(extension);
+        session.Extensions.Add(extension);
+    }
+
+    private void AttachSessionExtensions(GameSession session)
+    {
+        session.Extensions = sessionExtensions
+            .Where(extension => extension.GameSessionId == session.Id)
+            .OrderBy(extension => extension.CreatedAt)
+            .ToList();
+    }
+
+    private void SeedClosedShifts()
+    {
+        var cashier = CreateCashier(1);
+        var yesterday = DateTime.Today.AddDays(-1);
+
+        var firstShift = new CashierShift
+        {
+            Id = nextShiftId++,
+            ClubId = club.Id,
+            Club = club,
+            CashierId = cashier.Id,
+            Cashier = cashier,
+            OpenedAt = yesterday.AddHours(9),
+            ClosedAt = yesterday.AddHours(17),
+            OpeningCashAmount = 5000,
+            CurrentCashAmount = 12800
+        };
+
+        var secondShift = new CashierShift
+        {
+            Id = nextShiftId++,
+            ClubId = club.Id,
+            Club = club,
+            CashierId = cashier.Id,
+            Cashier = cashier,
+            OpenedAt = yesterday.AddHours(17),
+            ClosedAt = yesterday.AddHours(23),
+            OpeningCashAmount = 12800,
+            CurrentCashAmount = 21400
+        };
+
+        cashierShifts.Add(firstShift);
+        cashierShifts.Add(secondShift);
+
+        var demoClient = clients[0];
+        var cardPayment = paymentTypes.First(paymentType => paymentType.Code == "Card");
+        demoClient.Balance += 800;
+        AddTransaction(demoClient, cardPayment, 500, TransactionType.BalanceTopUp, firstShift);
+        AddTransaction(demoClient, cardPayment, 300, TransactionType.BalanceTopUp, secondShift);
+
+        SeedDemoCompletedSession(firstShift, demoClient);
+    }
+
+    private void SeedDemoCompletedSession(CashierShift shift, Client client)
+    {
+        var computer = FindComputer(1);
+        var tariff = tariffs.First(t => t.Id == 1);
+        var tariffZone = FindTariffZone(tariff.Id, 1);
+        if (computer is null || tariffZone is null)
+        {
+            return;
+        }
+
+        var startedAt = shift.OpenedAt.AddHours(1);
+        var session = new GameSession
+        {
+            Id = nextSessionId++,
+            ClubId = club.Id,
+            Club = club,
+            ComputerId = computer.Id,
+            Computer = computer,
+            ClientId = client.Id,
+            Client = client,
+            CashierShiftId = shift.Id,
+            CashierShift = shift,
+            TariffId = tariff.Id,
+            Tariff = tariff,
+            TariffZoneId = tariffZone.Id,
+            TariffZone = tariffZone,
+            StartedAt = startedAt,
+            PlannedEndAt = startedAt.AddHours(1),
+            InitialPrice = tariffZone.Price,
+            TotalPrice = tariffZone.Price + 150,
+            Status = GameSessionStatus.Completed,
+            EndedAt = startedAt.AddHours(1).AddMinutes(30)
+        };
+
+        sessions.Add(session);
+        client.Balance -= session.TotalPrice;
+        AddBalanceTransaction(client, tariffZone.Price, TransactionType.SessionStart, session, shift);
+        AddBalanceTransaction(client, 150, TransactionType.SessionExtension, session, shift);
+        RecordSessionExtension(session, tariffs.First(t => t.Id == 4), 30, 150, "Продление: 30 минут");
     }
 }

@@ -66,12 +66,17 @@
             return;
         }
 
-        await ClubManagementService.RegisterClientAsync(firstName, lastName, phoneNumber, email);
+        var result = await ClubManagementService.RegisterClientAsync(firstName, lastName, phoneNumber, email);
+        notification = result.Message;
+
+        if (!result.Succeeded)
+        {
+            return;
+        }
 
         firstName = string.Empty;
         lastName = string.Empty;
         phoneNumber = null;
         email = null;
-        notification = "Гость зарегистрирован.";
     }
 }

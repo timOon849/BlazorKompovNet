@@ -164,7 +164,7 @@ else
 
     private bool HasActiveSession(int clientId)
     {
-        return sessions.Any(session => session.ClientId == clientId && session.Status == "Active");
+        return sessions.Any(session => session.ClientId == clientId && ModelLabels.IsSessionActive(session));
     }
 
     private int ActiveBookingCount(int clientId)

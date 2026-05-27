@@ -46,8 +46,8 @@ else
             <div class="card h-100">
                 <div class="card-body">
                     <p class="text-muted mb-1">Выборка</p>
-                    <h2 class="h3 mb-0">@FormatMoney(TotalIncome + TotalSessionCharges)</h2>
-                    <p class="small text-muted mb-0">Поступления + сессии</p>
+                    <h2 class="h3 mb-0">@FormatMoney(TotalIncome)</h2>
+                    <p class="small text-muted mb-0">Только пополнения (без списаний за сессии)</p>
                 </div>
             </div>
         </div>
@@ -137,7 +137,7 @@ else
                         <option value="">Все типы</option>
                         @foreach (var type in TransactionTypes)
                         {
-                            <option value="@type">@GetTransactionTypeText(type)</option>
+                            <option value="@type">@ModelLabels.GetTransactionTypeText(type)</option>
                         }
                     </select>
                 </div>
@@ -212,7 +212,7 @@ else
                                         <strong>@transaction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</strong>
                                         <div class="text-muted small">@transaction.CreatedAt.ToLocalTime().ToString("HH:mm")</div>
                                     </td>
-                                    <td>@GetTransactionTypeText(transaction.Type)</td>
+                                    <td>@ModelLabels.GetTransactionTypeText(transaction.Type)</td>
                                     <td>@GetClientName(transaction.Client)</td>
                                     <td>@(transaction.PaymentType?.Name ?? "-")</td>
                                     <td><span class="badge @GetStatusBadgeClass(transaction.Status)">@GetStatusText(transaction.Status)</span></td>
@@ -242,7 +242,7 @@ else
     private IReadOnlyList<Transaction>? transactions;
     private CashierShift? currentShift;
     private string? searchText;
-    private string? typeFilter;
+    private TransactionType? typeFilter;
     private string? statusFilter;
     private string? periodFilter;
     private string? dateFromText;
@@ -253,12 +253,11 @@ else
         .OrderByDescending(transaction => transaction.CreatedAt)
         ?? Enumerable.Empty<Transaction>();
 
-    private IEnumerable<string> TransactionTypes => transactions?
+    private IEnumerable<TransactionType> TransactionTypes => transactions?
         .Select(transaction => transaction.Type)
-        .Where(type => !string.IsNullOrWhiteSpace(type))
         .Distinct()
-        .OrderBy(GetTransactionTypeText)
-        ?? Enumerable.Empty<string>();
+        .OrderBy(type => type)
+        ?? Enumerable.Empty<TransactionType>();
 
     private decimal TotalIncome => FilteredTransactions
         .Where(transaction => !IsSessionCharge(transaction))
@@ -293,7 +292,7 @@ else
 
     private bool MatchesFilters(Transaction transaction)
     {
-        if (!string.IsNullOrWhiteSpace(typeFilter) && transaction.Type != typeFilter)
+        if (typeFilter is not null && transaction.Type != typeFilter)
         {
             return false;
         }
@@ -315,8 +314,8 @@ else
 
         var search = searchText.Trim();
         return GetClientName(transaction.Client).Contains(search, StringComparison.OrdinalIgnoreCase)
-            || GetTransactionTypeText(transaction.Type).Contains(search, StringComparison.OrdinalIgnoreCase)
-            || transaction.Type.Contains(search, StringComparison.OrdinalIgnoreCase)
+            || ModelLabels.GetTransactionTypeText(transaction.Type).Contains(search, StringComparison.OrdinalIgnoreCase)
+            || transaction.Type.ToString().Contains(search, StringComparison.OrdinalIgnoreCase)
             || (transaction.PaymentType?.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
     }
 
@@ -346,7 +345,7 @@ else
         return periodFilter switch
         {
             "Today" => date == DateTime.Today,
-            "Shift" => transaction.CashierShiftId == CurrentShiftId,
+            "Shift" => CurrentShiftId is not null && transaction.CashierShiftId == CurrentShiftId,
             "Custom" => MatchesCustomPeriod(date),
             _ => true
         };
@@ -376,24 +375,12 @@ else
 
     private static bool IsSessionCharge(Transaction transaction)
     {
-        return transaction.Type is "SessionStart" or "SessionExtension";
+        return ModelLabels.IsSessionCharge(transaction.Type);
     }
 
     private static string GetClientName(Client? client)
     {
         return client is null ? "-" : $"{client.FirstName} {client.LastName}";
-    }
-
-    private static string GetTransactionTypeText(string type)
-    {
-        return type switch
-        {
-            "BalanceTopUp" => "Пополнение баланса",
-            "BonusAccrual" => "Бонусное пополнение",
-            "SessionStart" => "Старт сессии",
-            "SessionExtension" => "Продление сессии",
-            _ => type
-        };
     }
 
     private static string GetStatusText(PaymentStatus status)
@@ -436,11 +423,11 @@ else
             builder.AppendLine(string.Join(';',
                 EscapeCsv(transaction.Id.ToString()),
                 EscapeCsv(transaction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")),
-                EscapeCsv(GetTransactionTypeText(transaction.Type)),
+                EscapeCsv(ModelLabels.GetTransactionTypeText(transaction.Type)),
                 EscapeCsv(GetClientName(transaction.Client)),
                 EscapeCsv(transaction.PaymentType?.Name ?? "-"),
                 EscapeCsv(GetStatusText(transaction.Status)),
-                EscapeCsv(transaction.Amount.ToString("N2")),
+                EscapeCsv(FormatTransactionAmount(transaction).TrimStart('+', '-')),
                 EscapeCsv(transaction.GameSessionId?.ToString() ?? "-")));
         }
 

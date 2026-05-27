@@ -26,7 +26,7 @@ public sealed class Transaction
 
     public decimal Amount { get; set; }
 
-    public string Type { get; set; } = string.Empty;
+    public TransactionType Type { get; set; }
 
     public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
 

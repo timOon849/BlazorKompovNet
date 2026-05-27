@@ -22,7 +22,17 @@ public sealed class DashboardStats
 
     public int MaintenanceComputers { get; set; }
 
+    public int DisabledComputers { get; set; }
+
     public int BookingsToday { get; set; }
+
+    public int ActiveSessionsCount { get; set; }
+
+    public int CompletedSessionsToday { get; set; }
+
+    public int TopUpsToday { get; set; }
+
+    public decimal TopUpAmountToday { get; set; }
 
     public CashierShift? CurrentShift { get; set; }
 }

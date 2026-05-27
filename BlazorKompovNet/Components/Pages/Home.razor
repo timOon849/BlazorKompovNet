@@ -4,7 +4,6 @@
 @inject IDashboardService DashboardService
 @inject IClubManagementService ClubManagementService
 @inject AuthenticationStateProvider AuthenticationStateProvider
-
 <PageTitle>Дашборд клуба</PageTitle>
 
 <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
@@ -109,6 +108,46 @@ else
                 <div class="card-body">
                     <p class="text-muted mb-1">Бронирований сегодня</p>
                     <h2 class="h3 mb-0">@stats.BookingsToday</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Активных сессий</p>
+                    <h2 class="h3 mb-0">@stats.ActiveSessionsCount</h2>
+                    <p class="small text-muted mb-0">Завершено сегодня: @stats.CompletedSessionsToday</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Пополнений сегодня</p>
+                    <h2 class="h3 mb-0">@stats.TopUpsToday</h2>
+                    <p class="small text-muted mb-0">На сумму @FormatMoney(stats.TopUpAmountToday)</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Выключено</p>
+                    <h2 class="h3 mb-0">@stats.DisabledComputers</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Справочник</p>
+                    <a class="btn btn-outline-primary btn-sm" href="/tariffs">Тарифы клуба</a>
                 </div>
             </div>
         </div>

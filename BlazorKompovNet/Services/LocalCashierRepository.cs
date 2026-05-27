@@ -45,4 +45,10 @@ public sealed class LocalCashierRepository : ICashierRepository
 
         return Task.CompletedTask;
     }
+
+    public Task<Cashier?> GetByIdAsync(int cashierId)
+    {
+        var cashier = cashiers.FirstOrDefault(cashier => cashier.Id == cashierId && cashier.IsActive);
+        return Task.FromResult(cashier);
+    }
 }

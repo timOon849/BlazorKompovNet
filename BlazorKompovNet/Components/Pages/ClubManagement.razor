@@ -744,24 +744,24 @@
     private async Task TurnOnComputerAsync(int computerId)
     {
         CloseComputerMenu();
-        await ClubManagementService.TurnOnComputerAsync(computerId);
-        notification = "Компьютер включен.";
+        var result = await ClubManagementService.TurnOnComputerAsync(computerId);
+        notification = result.Message;
         await LoadDataAsync();
     }
 
     private async Task TurnOffComputerAsync(int computerId)
     {
         CloseComputerMenu();
-        await ClubManagementService.TurnOffComputerAsync(computerId);
-        notification = "Компьютер выключен.";
+        var result = await ClubManagementService.TurnOffComputerAsync(computerId);
+        notification = result.Message;
         await LoadDataAsync();
     }
 
     private async Task RestartComputerAsync(int computerId)
     {
         CloseComputerMenu();
-        await ClubManagementService.RestartComputerAsync(computerId);
-        notification = "Компьютер перезагружен.";
+        var result = await ClubManagementService.RestartComputerAsync(computerId);
+        notification = result.Message;
         await LoadDataAsync();
     }
 

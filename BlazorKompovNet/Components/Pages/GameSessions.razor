@@ -33,7 +33,7 @@ else
             <div class="card h-100 border-primary">
                 <div class="card-body">
                     <p class="text-muted mb-1">Активные</p>
-                    <h2 class="h3 mb-0">@FilteredSessions.Count(session => GetSessionDisplayStatus(session) == "Active")</h2>
+                    <h2 class="h3 mb-0">@FilteredSessions.Count(session => ModelLabels.GetSessionDisplayKey(session) == "Active")</h2>
                 </div>
             </div>
         </div>
@@ -42,7 +42,7 @@ else
             <div class="card h-100 border-warning">
                 <div class="card-body">
                     <p class="text-muted mb-1">Просроченные</p>
-                    <h2 class="h3 mb-0">@FilteredSessions.Count(session => GetSessionDisplayStatus(session) == "Overdue")</h2>
+                    <h2 class="h3 mb-0">@FilteredSessions.Count(session => ModelLabels.GetSessionDisplayKey(session) == "Overdue")</h2>
                 </div>
             </div>
         </div>
@@ -51,7 +51,7 @@ else
             <div class="card h-100">
                 <div class="card-body">
                     <p class="text-muted mb-1">Завершенные</p>
-                    <h2 class="h3 mb-0">@FilteredSessions.Count(session => session.Status == "Completed")</h2>
+                    <h2 class="h3 mb-0">@FilteredSessions.Count(session => session.Status == GameSessionStatus.Completed)</h2>
                 </div>
             </div>
         </div>
@@ -60,7 +60,8 @@ else
             <div class="card h-100">
                 <div class="card-body">
                     <p class="text-muted mb-1">Выручка</p>
-                    <h2 class="h3 mb-0">@FormatMoney(FilteredSessions.Sum(session => session.TotalPrice))</h2>
+                    <h2 class="h3 mb-0">@FormatMoney(FilteredSessions.Where(session => session.Status == GameSessionStatus.Completed).Sum(session => session.TotalPrice))</h2>
+                    <p class="small text-muted mb-0">Только завершённые в выборке</p>
                 </div>
             </div>
         </div>
@@ -168,14 +169,14 @@ else
                                         <div>План: @session.PlannedEndAt.ToString("HH:mm")</div>
                                         <div class="text-muted small">@GetSessionTimeText(session)</div>
                                     </td>
-                                    <td><span class="badge @GetSessionStatusBadgeClass(GetSessionDisplayStatus(session))">@GetSessionStatusText(GetSessionDisplayStatus(session))</span></td>
+                                    <td><span class="badge @ModelLabels.GetSessionStatusBadgeClass(ModelLabels.GetSessionDisplayKey(session))">@ModelLabels.GetSessionStatusText(session)</span></td>
                                     <td class="text-end">@FormatMoney(session.TotalPrice)</td>
                                     <td class="text-end">
                                         <div class="btn-group btn-group-sm">
                                             <a class="btn btn-outline-primary" href="@($"/sessions/{session.Id}")">Детали</a>
                                             <button class="btn btn-outline-success"
                                                     type="button"
-                                                    disabled="@(session.Status != "Active")"
+                                                    disabled="@(session.Status != GameSessionStatus.Active)"
                                                     @onclick="() => OpenCompleteDialog(session)">
                                                 Завершить
                                             </button>
@@ -288,7 +289,7 @@ else
 
     private bool MatchesFilters(GameSession session)
     {
-        if (!string.IsNullOrWhiteSpace(statusFilter) && GetSessionDisplayStatus(session) != statusFilter)
+        if (!string.IsNullOrWhiteSpace(statusFilter) && ModelLabels.GetSessionDisplayKey(session) != statusFilter)
         {
             return false;
         }
@@ -336,7 +337,7 @@ else
         return periodFilter switch
         {
             "Today" => date == DateTime.Today,
-            "Shift" => session.CashierShiftId == CurrentShiftId,
+            "Shift" => CurrentShiftId is not null && session.CashierShiftId == CurrentShiftId,
             "Custom" => MatchesCustomPeriod(date),
             _ => true
         };
@@ -375,35 +376,6 @@ else
             : $"Осталось {FormatDuration(remaining)}";
     }
 
-    private static string GetSessionDisplayStatus(GameSession session)
-    {
-        return session.Status == "Active" && session.PlannedEndAt < DateTime.Now
-            ? "Overdue"
-            : session.Status;
-    }
-
-    private static string GetSessionStatusText(string status)
-    {
-        return status switch
-        {
-            "Active" => "Активна",
-            "Overdue" => "Просрочена",
-            "Completed" => "Завершена",
-            _ => status
-        };
-    }
-
-    private static string GetSessionStatusBadgeClass(string status)
-    {
-        return status switch
-        {
-            "Active" => "text-bg-primary",
-            "Overdue" => "text-bg-warning",
-            "Completed" => "text-bg-success",
-            _ => "text-bg-secondary"
-        };
-    }
-
     private static string FormatDuration(TimeSpan duration)
     {
         return duration.TotalHours >= 1
@@ -428,7 +400,7 @@ else
                 EscapeCsv(session.StartedAt.ToString("dd.MM.yyyy HH:mm")),
                 EscapeCsv(session.PlannedEndAt.ToString("dd.MM.yyyy HH:mm")),
                 EscapeCsv(session.EndedAt?.ToString("dd.MM.yyyy HH:mm") ?? "-"),
-                EscapeCsv(GetSessionStatusText(GetSessionDisplayStatus(session))),
+                EscapeCsv(ModelLabels.GetSessionStatusText(session)),
                 EscapeCsv(GetClientName(session.Client)),
                 EscapeCsv(session.Computer?.Name ?? "-"),
                 EscapeCsv(session.Tariff?.Name ?? "-"),

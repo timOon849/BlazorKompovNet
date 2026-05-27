@@ -26,6 +26,8 @@ public interface IClubManagementService
 
     Task<GameSession?> GetSessionAsync(int sessionId);
 
+    Task<IReadOnlyList<SessionExtension>> GetSessionExtensionsAsync(int sessionId);
+
     Task<IReadOnlyList<Transaction>> GetTransactionsAsync();
 
     Task<Transaction?> GetTransactionAsync(int transactionId);
@@ -36,7 +38,7 @@ public interface IClubManagementService
 
     Task<IReadOnlyList<PaymentType>> GetPaymentTypesAsync();
 
-    Task RegisterClientAsync(string firstName, string lastName, string? phoneNumber, string? email);
+    Task<ClubOperationResult> RegisterClientAsync(string firstName, string lastName, string? phoneNumber, string? email);
 
     Task<ClubOperationResult> OpenShiftAsync(int cashierId, decimal openingCashAmount);
 
@@ -58,9 +60,9 @@ public interface IClubManagementService
 
     Task<ClubOperationResult> CompleteSessionAsync(int sessionId);
 
-    Task TurnOnComputerAsync(int computerId);
+    Task<ClubOperationResult> TurnOnComputerAsync(int computerId);
 
-    Task TurnOffComputerAsync(int computerId);
+    Task<ClubOperationResult> TurnOffComputerAsync(int computerId);
 
-    Task RestartComputerAsync(int computerId);
+    Task<ClubOperationResult> RestartComputerAsync(int computerId);
 }

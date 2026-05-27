@@ -35,12 +35,16 @@ public sealed class LocalDashboardService : IDashboardService
             CurrentClub = currentClub,
             AvailableClubs = clubs,
             RevenueToday = paidTransactions
-                .Where(transaction => transaction.CreatedAt.ToLocalTime().Date == today)
+                .Where(transaction =>
+                    transaction.CreatedAt.ToLocalTime().Date == today &&
+                    !ModelLabels.IsSessionCharge(transaction.Type))
                 .Sum(transaction => transaction.Amount),
             RevenueCurrentShift = currentShift is null
                 ? 0
                 : paidTransactions
-                    .Where(transaction => transaction.CashierShiftId == currentShift.Id)
+                    .Where(transaction =>
+                        transaction.CashierShiftId == currentShift.Id &&
+                        !ModelLabels.IsSessionCharge(transaction.Type))
                     .Sum(transaction => transaction.Amount),
             VisitorsToday = sessions
                 .Where(session => session.StartedAt.Date == today)
@@ -48,14 +52,27 @@ public sealed class LocalDashboardService : IDashboardService
                 .Distinct()
                 .Count(),
             ActiveVisitors = sessions
-                .Where(session => session.Status == "Active")
+                .Where(session => session.Status == GameSessionStatus.Active)
                 .Select(session => session.ClientId)
                 .Distinct()
                 .Count(),
+            ActiveSessionsCount = sessions.Count(session => session.Status == GameSessionStatus.Active),
+            CompletedSessionsToday = sessions.Count(session =>
+                session.Status == GameSessionStatus.Completed &&
+                (session.EndedAt?.Date == today || session.StartedAt.Date == today)),
+            TopUpsToday = paidTransactions.Count(transaction =>
+                transaction.CreatedAt.ToLocalTime().Date == today &&
+                transaction.Type is TransactionType.BalanceTopUp or TransactionType.BonusAccrual),
+            TopUpAmountToday = paidTransactions
+                .Where(transaction =>
+                    transaction.CreatedAt.ToLocalTime().Date == today &&
+                    transaction.Type is TransactionType.BalanceTopUp or TransactionType.BonusAccrual)
+                .Sum(transaction => transaction.Amount),
             AvailableComputers = computers.Count(computer => computer.Status?.Code == ComputerStatusCodes.Available),
             BusyComputers = computers.Count(computer => computer.Status?.Code == ComputerStatusCodes.Busy),
             ReservedComputers = computers.Count(computer => computer.Status?.Code == ComputerStatusCodes.Reserved),
             MaintenanceComputers = computers.Count(computer => computer.Status?.Code == ComputerStatusCodes.Maintenance),
+            DisabledComputers = computers.Count(computer => computer.Status?.Code == ComputerStatusCodes.Disabled),
             BookingsToday = activeBookings.Count(booking => booking.StartsAt.Date == today),
             CurrentShift = currentShift
         };

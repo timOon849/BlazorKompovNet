@@ -21,7 +21,7 @@ else
     <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
         <div>
             <h1>Транзакция #@transaction.Id</h1>
-            <p class="text-muted mb-0">@GetTransactionTypeText(transaction.Type)</p>
+            <p class="text-muted mb-0">@ModelLabels.GetTransactionTypeText(transaction.Type)</p>
         </div>
 
         <div class="d-flex gap-2">
@@ -70,7 +70,7 @@ else
 
             <dl class="row mb-0">
                 <dt class="col-sm-4">Тип операции</dt>
-                <dd class="col-sm-8">@GetTransactionTypeText(transaction.Type)</dd>
+                <dd class="col-sm-8">@ModelLabels.GetTransactionTypeText(transaction.Type)</dd>
 
                 <dt class="col-sm-4">Клиент</dt>
                 <dd class="col-sm-8">@GetClientName(transaction.Client)</dd>
@@ -97,7 +97,7 @@ else
                 <dd class="col-sm-8">@(transaction.Club?.Name ?? "-")</dd>
 
                 <dt class="col-sm-4">Технический тип</dt>
-                <dd class="col-sm-8"><code>@transaction.Type</code></dd>
+                <dd class="col-sm-8">@ModelLabels.GetTransactionTypeText(transaction.Type)</dd>
             </dl>
         </div>
     </div>
@@ -116,7 +116,7 @@ else
 
     private static bool IsSessionCharge(Transaction transaction)
     {
-        return transaction.Type is "SessionStart" or "SessionExtension";
+        return ModelLabels.IsSessionCharge(transaction.Type);
     }
 
     private static string GetClientName(Client? client)
@@ -129,18 +129,6 @@ else
         return shift is null
             ? "-"
             : $"{shift.Cashier?.FullName ?? "Кассир"} · {shift.OpenedAt:dd.MM.yyyy HH:mm}";
-    }
-
-    private static string GetTransactionTypeText(string type)
-    {
-        return type switch
-        {
-            "BalanceTopUp" => "Пополнение баланса",
-            "BonusAccrual" => "Бонусное пополнение",
-            "SessionStart" => "Старт сессии",
-            "SessionExtension" => "Продление сессии",
-            _ => type
-        };
     }
 
     private static string GetStatusText(PaymentStatus status)
