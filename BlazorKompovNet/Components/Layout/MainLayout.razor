@@ -1,4 +1,4 @@
-п»ї@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
 <div class="page">
     <div class="sidebar">
@@ -11,11 +11,11 @@
                 <Authorized>
                     <span>@context.User.Identity?.Name</span>
                     <form method="post" action="/auth/logout" class="ms-3">
-                        <button type="submit" class="btn btn-link p-0">Р’С‹Р№С‚Рё</button>
+                        <button type="submit" class="btn btn-link p-0">Выйти</button>
                     </form>
                 </Authorized>
                 <NotAuthorized>
-                    <a href="login">Р’РѕР№С‚Рё</a>
+                    <a href="login">Войти</a>
                 </NotAuthorized>
             </AuthorizeView>
         </div>
@@ -29,5 +29,5 @@
 <div id="blazor-error-ui">
     An unhandled error has occurred.
     <a href="" class="reload">Reload</a>
-    <a class="dismiss">рџ—™</a>
+    <a class="dismiss">??</a>
 </div>

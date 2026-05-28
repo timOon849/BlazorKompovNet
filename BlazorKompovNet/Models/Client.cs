@@ -1,5 +1,4 @@
-namespace BlazorKompovNet.Models;
-
+﻿namespace BlazorKompovNet.Models;
 public sealed class Client
 {
     public int Id { get; set; }
@@ -12,9 +11,13 @@ public sealed class Client
 
     public string? Email { get; set; }
 
+    public string? Login { get; set; }
+
+    public string? Password { get; set; }
+
     public DateTime RegisteredAt { get; set; } = DateTime.UtcNow;
 
     public decimal Balance { get; set; }
 
-    public List<Booking> Bookings { get; set; } = [];
+    public bool IsActive { get; set; } = true;
 }

@@ -1,12 +1,12 @@
-п»ї<CascadingAuthenticationState>
+<CascadingAuthenticationState>
     <Router AppAssembly="typeof(Program).Assembly">
         <Found Context="routeData">
             <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
                 <NotAuthorized>
                     <LayoutView Layout="typeof(Layout.MainLayout)">
-                        <h1>РўСЂРµР±СѓРµС‚СЃСЏ РІС…РѕРґ</h1>
-                        <p>Р”Р»СЏ СѓРїСЂР°РІР»РµРЅРёСЏ РєРѕРјРїСЊСЋС‚РµСЂРЅС‹Рј РєР»СѓР±РѕРј РІРѕР№РґРёС‚Рµ РїРѕРґ СѓС‡РµС‚РЅРѕР№ Р·Р°РїРёСЃСЊСЋ РєР°СЃСЃРёСЂР°.</p>
-                        <a class="btn btn-primary" href="login">Р’РѕР№С‚Рё</a>
+                        <h1>Требуется вход</h1>
+                        <p>Для управления компьютерным клубом войдите под учетной записью кассира.</p>
+                        <a class="btn btn-primary" href="login">Войти</a>
                     </LayoutView>
                 </NotAuthorized>
             </AuthorizeRouteView>
@@ -14,8 +14,8 @@
         </Found>
         <NotFound>
             <LayoutView Layout="typeof(Layout.MainLayout)">
-                <h1>РЎС‚СЂР°РЅРёС†Р° РЅРµ РЅР°Р№РґРµРЅР°</h1>
-                <p>РўР°РєРѕРіРѕ СЂР°Р·РґРµР»Р° РЅРµС‚ РІ СЃРёСЃС‚РµРјРµ СѓРїСЂР°РІР»РµРЅРёСЏ РєР»СѓР±РѕРј.</p>
+                <h1>Страница не найдена</h1>
+                <p>Такого раздела нет в системе управления клубом.</p>
             </LayoutView>
         </NotFound>
     </Router>

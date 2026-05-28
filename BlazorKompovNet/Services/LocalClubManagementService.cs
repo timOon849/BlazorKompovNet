@@ -105,9 +105,34 @@ public sealed class LocalClubManagementService : IClubManagementService
 
         clients =
         [
-            new() { Id = 1, FirstName = "Иван", LastName = "Петров", PhoneNumber = "+7 900 111-22-33", Balance = 1200 },
-            new() { Id = 2, FirstName = "Анна", LastName = "Смирнова", PhoneNumber = "+7 900 222-33-44", Balance = 800 },
-            new() { Id = 3, FirstName = "Максим", LastName = "Козлов", PhoneNumber = "+7 900 333-44-55", Balance = 2400 }
+            new()
+            {
+                Id = 1,
+                FirstName = "Алексей",
+                LastName = "Ivanov",
+                PhoneNumber = "+7 (900) 123-45-67",
+                Login = "123",
+                Password = "123",
+                Balance = 1500
+            },
+            new()
+            {
+                Id = 2,
+                FirstName = "Дмитрий",
+                LastName = "Админов",
+                PhoneNumber = "+7 (900) 765-43-21",
+                Login = "admin",
+                Password = "qwe",
+                Balance = 5000
+            },
+            new()
+            {
+                Id = 3,
+                FirstName = "Максим",
+                LastName = "Козлов",
+                PhoneNumber = "+7 900 333-44-55",
+                Balance = 2400
+            }
         ];
 
         var reservedComputer = FindComputer(4);
@@ -135,7 +160,6 @@ public sealed class LocalClubManagementService : IClubManagementService
             if (DateTime.Now < booking.EndsAt)
             {
                 bookings.Add(booking);
-                bookingClient.Bookings.Add(booking);
             }
             else
             {
@@ -532,7 +556,6 @@ public sealed class LocalClubManagementService : IClubManagementService
             };
 
             bookings.Add(booking);
-            client.Bookings.Add(booking);
 
             if (booking.Status == BookingStatus.Active && computer.Status?.Code == ComputerStatusCodes.Available)
             {
