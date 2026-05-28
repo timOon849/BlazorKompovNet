@@ -34,7 +34,7 @@ public static class ModelLabels
         };
     }
 
-    public static string GetTransactionTypeText(TransactionType type)
+    public static string GetTransactionTypeText(string type)
     {
         return type switch
         {
@@ -42,13 +42,13 @@ public static class ModelLabels
             TransactionType.BonusAccrual => "Бонусное пополнение",
             TransactionType.SessionStart => "Старт сессии",
             TransactionType.SessionExtension => "Продление сессии",
-            _ => type.ToString()
+            _ => type
         };
     }
 
-    public static bool IsSessionCharge(TransactionType type)
+    public static bool IsSessionCharge(string type)
     {
-        return type is TransactionType.SessionStart or TransactionType.SessionExtension;
+        return type == TransactionType.SessionStart || type == TransactionType.SessionExtension;
     }
 
     public static string FormatTransactionAmount(Transaction transaction)
@@ -57,7 +57,7 @@ public static class ModelLabels
         return $"{prefix}{transaction.Amount:N0} ₽";
     }
 
-    public static string GetPaymentStatusText(PaymentStatus status)
+    public static string GetPaymentStatusText(string status)
     {
         return status switch
         {
@@ -65,11 +65,11 @@ public static class ModelLabels
             PaymentStatus.Paid => "Оплачено",
             PaymentStatus.Refunded => "Возврат",
             PaymentStatus.Cancelled => "Отменено",
-            _ => status.ToString()
+            _ => status
         };
     }
 
-    public static string GetPaymentStatusBadgeClass(PaymentStatus status)
+    public static string GetPaymentStatusBadgeClass(string status)
     {
         return status switch
         {
@@ -81,7 +81,7 @@ public static class ModelLabels
         };
     }
 
-    public static string GetBookingStatusText(BookingStatus status)
+    public static string GetBookingStatusText(string status)
     {
         return status switch
         {
@@ -90,11 +90,11 @@ public static class ModelLabels
             BookingStatus.Completed => "Завершена",
             BookingStatus.Cancelled => "Отменена",
             BookingStatus.NoShow => "Неявка",
-            _ => status.ToString()
+            _ => status
         };
     }
 
-    public static string GetBookingStatusBadgeClass(BookingStatus status)
+    public static string GetBookingStatusBadgeClass(string status)
     {
         return status switch
         {

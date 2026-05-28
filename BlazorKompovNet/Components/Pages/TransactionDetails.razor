@@ -131,7 +131,7 @@ else
             : $"{shift.Cashier?.FullName ?? "Кассир"} · {shift.OpenedAt:dd.MM.yyyy HH:mm}";
     }
 
-    private static string GetStatusText(PaymentStatus status)
+    private static string GetStatusText(string status)
     {
         return status switch
         {
@@ -139,11 +139,11 @@ else
             PaymentStatus.Paid => "Оплачено",
             PaymentStatus.Refunded => "Возврат",
             PaymentStatus.Cancelled => "Отменено",
-            _ => status.ToString()
+            _ => status
         };
     }
 
-    private static string GetStatusBadgeClass(PaymentStatus status)
+    private static string GetStatusBadgeClass(string status)
     {
         return status switch
         {

@@ -1,7 +1,7 @@
 namespace BlazorKompovNet.Models;
 
-public enum AdminRole
+public static class AdminRole
 {
-    Main,
-    Regular
+    public const string Main = "Main";
+    public const string Regular = "Regular";
 }

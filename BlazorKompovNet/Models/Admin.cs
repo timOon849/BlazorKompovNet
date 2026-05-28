@@ -6,5 +6,5 @@ public sealed class Admin
     public string Login { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
-    public AdminRole Role { get; set; } = AdminRole.Regular;
+    public string Role { get; set; } = AdminRole.Regular;
 }

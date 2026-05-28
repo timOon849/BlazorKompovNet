@@ -24,7 +24,7 @@ public sealed class Booking
 
     public DateTime EndsAt { get; set; }
 
-    public BookingStatus Status { get; set; } = BookingStatus.Created;
+    public string Status { get; set; } = BookingStatus.Created;
 
     public int? CreatedByCashierId { get; set; }
 

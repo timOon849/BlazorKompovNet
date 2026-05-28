@@ -26,9 +26,9 @@ public sealed class Transaction
 
     public decimal Amount { get; set; }
 
-    public TransactionType Type { get; set; }
+    public string Type { get; set; } = TransactionType.BalanceTopUp;
 
-    public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
+    public string Status { get; set; } = PaymentStatus.Pending;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

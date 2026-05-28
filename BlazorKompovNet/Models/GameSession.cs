@@ -38,7 +38,7 @@ public sealed class GameSession
 
     public decimal TotalPrice { get; set; }
 
-    public GameSessionStatus Status { get; set; } = GameSessionStatus.Active;
+    public string Status { get; set; } = GameSessionStatus.Active;
 
     public List<Transaction> Transactions { get; set; } = [];
 

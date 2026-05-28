@@ -169,7 +169,7 @@ else
 
     private int ActiveBookingCount(int clientId)
     {
-        return ClientBookings(clientId).Count(booking => booking.Status is BookingStatus.Created or BookingStatus.Active);
+        return ClientBookings(clientId).Count(booking => booking.Status == BookingStatus.Created || booking.Status == BookingStatus.Active);
     }
 
     private IEnumerable<Booking> ClientBookings(int clientId)

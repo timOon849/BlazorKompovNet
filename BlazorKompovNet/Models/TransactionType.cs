@@ -1,9 +1,9 @@
 namespace BlazorKompovNet.Models;
 
-public enum TransactionType
+public static class TransactionType
 {
-    BalanceTopUp,
-    BonusAccrual,
-    SessionStart,
-    SessionExtension
+    public const string BalanceTopUp = "BalanceTopUp";
+    public const string BonusAccrual = "BonusAccrual";
+    public const string SessionStart = "SessionStart";
+    public const string SessionExtension = "SessionExtension";
 }

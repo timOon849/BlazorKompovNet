@@ -10,7 +10,7 @@ public sealed class Cashier
 
     public string Password { get; set; } = string.Empty;
 
-    public CashierRole Role { get; set; } = CashierRole.Cashier;
+    public string Role { get; set; } = CashierRole.Cashier;
 
     public bool IsActive { get; set; } = true;
 

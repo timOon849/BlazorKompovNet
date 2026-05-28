@@ -88,7 +88,7 @@ else
                     <label class="form-label" for="bookingStatus">Статус</label>
                     <select class="form-select" id="bookingStatus" @bind="statusFilter">
                         <option value="">Все</option>
-                        @foreach (var status in Enum.GetValues<BookingStatus>())
+                        @foreach (var status in BookingStatuses)
                         {
                             <option value="@status">@GetBookingStatusText(status)</option>
                         }
@@ -382,7 +382,7 @@ else
 
     private static bool IsOpenBooking(Booking booking)
     {
-        return booking.Status is BookingStatus.Created or BookingStatus.Active;
+        return booking.Status == BookingStatus.Created || booking.Status == BookingStatus.Active;
     }
 
     private static string GetClientName(Client? client)
@@ -390,7 +390,16 @@ else
         return client is null ? "-" : $"{client.FirstName} {client.LastName}";
     }
 
-    private static string GetBookingStatusText(BookingStatus status)
+    private static readonly string[] BookingStatuses =
+    [
+        BookingStatus.Created,
+        BookingStatus.Active,
+        BookingStatus.Completed,
+        BookingStatus.Cancelled,
+        BookingStatus.NoShow
+    ];
+
+    private static string GetBookingStatusText(string status)
     {
         return status switch
         {
@@ -399,11 +408,11 @@ else
             BookingStatus.Completed => "Завершена",
             BookingStatus.Cancelled => "Отменена",
             BookingStatus.NoShow => "Неявка",
-            _ => status.ToString()
+            _ => status
         };
     }
 
-    private static string GetBookingStatusBadgeClass(BookingStatus status)
+    private static string GetBookingStatusBadgeClass(string status)
     {
         return status switch
         {

@@ -1,7 +1,7 @@
 namespace BlazorKompovNet.Models;
 
-public enum CashierRole
+public static class CashierRole
 {
-    Cashier,
-    Administrator
+    public const string Cashier = "Cashier";
+    public const string Administrator = "Administrator";
 }

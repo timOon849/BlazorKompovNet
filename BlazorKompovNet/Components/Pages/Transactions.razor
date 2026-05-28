@@ -146,7 +146,7 @@ else
                     <label class="form-label" for="transactionStatus">Статус</label>
                     <select class="form-select" id="transactionStatus" @bind="statusFilter">
                         <option value="">Все</option>
-                        @foreach (var status in Enum.GetValues<PaymentStatus>())
+                        @foreach (var status in PaymentStatuses)
                         {
                             <option value="@status">@GetStatusText(status)</option>
                         }
@@ -242,7 +242,7 @@ else
     private IReadOnlyList<Transaction>? transactions;
     private CashierShift? currentShift;
     private string? searchText;
-    private TransactionType? typeFilter;
+    private string? typeFilter;
     private string? statusFilter;
     private string? periodFilter;
     private string? dateFromText;
@@ -253,11 +253,11 @@ else
         .OrderByDescending(transaction => transaction.CreatedAt)
         ?? Enumerable.Empty<Transaction>();
 
-    private IEnumerable<TransactionType> TransactionTypes => transactions?
+    private IEnumerable<string> TransactionTypes => transactions?
         .Select(transaction => transaction.Type)
         .Distinct()
         .OrderBy(type => type)
-        ?? Enumerable.Empty<TransactionType>();
+        ?? Enumerable.Empty<string>();
 
     private decimal TotalIncome => FilteredTransactions
         .Where(transaction => !IsSessionCharge(transaction))
@@ -315,7 +315,7 @@ else
         var search = searchText.Trim();
         return GetClientName(transaction.Client).Contains(search, StringComparison.OrdinalIgnoreCase)
             || ModelLabels.GetTransactionTypeText(transaction.Type).Contains(search, StringComparison.OrdinalIgnoreCase)
-            || transaction.Type.ToString().Contains(search, StringComparison.OrdinalIgnoreCase)
+            || transaction.Type.Contains(search, StringComparison.OrdinalIgnoreCase)
             || (transaction.PaymentType?.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
     }
 
@@ -383,7 +383,15 @@ else
         return client is null ? "-" : $"{client.FirstName} {client.LastName}";
     }
 
-    private static string GetStatusText(PaymentStatus status)
+    private static readonly string[] PaymentStatuses =
+    [
+        PaymentStatus.Pending,
+        PaymentStatus.Paid,
+        PaymentStatus.Refunded,
+        PaymentStatus.Cancelled
+    ];
+
+    private static string GetStatusText(string status)
     {
         return status switch
         {
@@ -391,11 +399,11 @@ else
             PaymentStatus.Paid => "Оплачено",
             PaymentStatus.Refunded => "Возврат",
             PaymentStatus.Cancelled => "Отменено",
-            _ => status.ToString()
+            _ => status
         };
     }
 
-    private static string GetStatusBadgeClass(PaymentStatus status)
+    private static string GetStatusBadgeClass(string status)
     {
         return status switch
         {

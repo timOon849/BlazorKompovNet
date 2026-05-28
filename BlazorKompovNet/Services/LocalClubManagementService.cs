@@ -248,7 +248,7 @@ public sealed class LocalClubManagementService : IClubManagementService
             var now = DateTime.Now;
             return Task.FromResult<IReadOnlyList<Booking>>(bookings
                 .Where(booking =>
-                    (booking.Status is BookingStatus.Created or BookingStatus.Active) &&
+                    (booking.Status == BookingStatus.Created || booking.Status == BookingStatus.Active) &&
                     booking.EndsAt > now)
                 .OrderBy(booking => booking.StartsAt)
                 .ToList());
@@ -938,12 +938,12 @@ public sealed class LocalClubManagementService : IClubManagementService
         return bookings.Any(booking =>
             booking.Id != ignoredBookingId &&
             booking.ComputerId == computerId &&
-            (booking.Status is BookingStatus.Created or BookingStatus.Active) &&
+            (booking.Status == BookingStatus.Created || booking.Status == BookingStatus.Active) &&
             startsAt < booking.EndsAt &&
             endsAt > booking.StartsAt);
     }
 
-    private ClubOperationResult ChangeBookingStatus(int bookingId, BookingStatus status, string successMessage)
+    private ClubOperationResult ChangeBookingStatus(int bookingId, string status, string successMessage)
     {
         RefreshBookingStatuses();
 
@@ -953,7 +953,7 @@ public sealed class LocalClubManagementService : IClubManagementService
             return ClubOperationResult.Failure("Бронь не найдена.");
         }
 
-        if (booking.Status is BookingStatus.Completed or BookingStatus.Cancelled or BookingStatus.NoShow)
+        if (booking.Status == BookingStatus.Completed || booking.Status == BookingStatus.Cancelled || booking.Status == BookingStatus.NoShow)
         {
             return ClubOperationResult.Failure("Эта бронь уже закрыта.");
         }
@@ -984,7 +984,7 @@ public sealed class LocalClubManagementService : IClubManagementService
         }
 
         foreach (var booking in bookings.Where(booking =>
-                     (booking.Status is BookingStatus.Created or BookingStatus.Active) &&
+                     (booking.Status == BookingStatus.Created || booking.Status == BookingStatus.Active) &&
                      booking.EndsAt <= now))
         {
             booking.Status = BookingStatus.Completed;
@@ -998,7 +998,7 @@ public sealed class LocalClubManagementService : IClubManagementService
         var booking = bookings.FirstOrDefault(booking =>
             booking.ComputerId == computerId &&
             booking.ClientId == clientId &&
-            (booking.Status is BookingStatus.Created or BookingStatus.Active) &&
+            (booking.Status == BookingStatus.Created || booking.Status == BookingStatus.Active) &&
             booking.StartsAt <= now &&
             booking.EndsAt > now);
 
@@ -1015,7 +1015,7 @@ public sealed class LocalClubManagementService : IClubManagementService
         foreach (var booking in bookings.Where(booking =>
                      booking.ComputerId == session.ComputerId &&
                      booking.ClientId == session.ClientId &&
-                     (booking.Status is BookingStatus.Created or BookingStatus.Active) &&
+                     (booking.Status == BookingStatus.Created || booking.Status == BookingStatus.Active) &&
                      booking.StartsAt <= now))
         {
             booking.Status = BookingStatus.Completed;
@@ -1049,7 +1049,7 @@ public sealed class LocalClubManagementService : IClubManagementService
             var now = DateTime.Now;
             var booking = bookings.FirstOrDefault(booking =>
                 booking.ComputerId == computer.Id &&
-                (booking.Status is BookingStatus.Created or BookingStatus.Active) &&
+                (booking.Status == BookingStatus.Created || booking.Status == BookingStatus.Active) &&
                 booking.StartsAt <= now &&
                 booking.EndsAt > now);
 
@@ -1090,7 +1090,7 @@ public sealed class LocalClubManagementService : IClubManagementService
         var now = DateTime.Now;
         var hasActiveBooking = bookings.Any(booking =>
             booking.ComputerId == computerId &&
-            (booking.Status is BookingStatus.Created or BookingStatus.Active) &&
+            (booking.Status == BookingStatus.Created || booking.Status == BookingStatus.Active) &&
             booking.EndsAt >= now);
 
         if (!hasActiveBooking)
@@ -1099,13 +1099,13 @@ public sealed class LocalClubManagementService : IClubManagementService
         }
     }
 
-    private void AddBalanceTransaction(Client client, decimal amount, TransactionType type, GameSession? session, CashierShift currentShift)
+    private void AddBalanceTransaction(Client client, decimal amount, string type, GameSession? session, CashierShift currentShift)
     {
         var balancePaymentType = paymentTypes.First(paymentType => paymentType.Code == "Balance");
         AddTransaction(client, balancePaymentType, amount, type, currentShift, session);
     }
 
-    private void AddTransaction(Client client, PaymentType paymentType, decimal amount, TransactionType type, CashierShift currentShift, GameSession? session = null)
+    private void AddTransaction(Client client, PaymentType paymentType, decimal amount, string type, CashierShift currentShift, GameSession? session = null)
     {
         var transaction = new Transaction
         {

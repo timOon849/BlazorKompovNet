@@ -1,7 +1,7 @@
 namespace BlazorKompovNet.Models;
 
-public enum GameSessionStatus
+public static class GameSessionStatus
 {
-    Active,
-    Completed
+    public const string Active = "Active";
+    public const string Completed = "Completed";
 }

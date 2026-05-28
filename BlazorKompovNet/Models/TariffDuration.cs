@@ -1,10 +1,10 @@
 namespace BlazorKompovNet.Models;
 
-public enum TariffDuration
+public static class TariffDuration
 {
-    ThirtyMinutes,
-    OneHour,
-    ThreeHours,
-    FiveHours,
-    Night
+    public const string ThirtyMinutes = "ThirtyMinutes";
+    public const string OneHour = "OneHour";
+    public const string ThreeHours = "ThreeHours";
+    public const string FiveHours = "FiveHours";
+    public const string Night = "Night";
 }

@@ -1,10 +1,10 @@
 namespace BlazorKompovNet.Models;
 
-public enum BookingStatus
+public static class BookingStatus
 {
-    Created,
-    Active,
-    Completed,
-    Cancelled,
-    NoShow
+    public const string Created = "Created";
+    public const string Active = "Active";
+    public const string Completed = "Completed";
+    public const string Cancelled = "Cancelled";
+    public const string NoShow = "NoShow";
 }

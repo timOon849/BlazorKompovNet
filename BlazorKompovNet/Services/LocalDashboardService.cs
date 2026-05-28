@@ -62,11 +62,11 @@ public sealed class LocalDashboardService : IDashboardService
                 (session.EndedAt?.Date == today || session.StartedAt.Date == today)),
             TopUpsToday = paidTransactions.Count(transaction =>
                 transaction.CreatedAt.ToLocalTime().Date == today &&
-                transaction.Type is TransactionType.BalanceTopUp or TransactionType.BonusAccrual),
+                transaction.Type == TransactionType.BalanceTopUp || transaction.Type == TransactionType.BonusAccrual),
             TopUpAmountToday = paidTransactions
                 .Where(transaction =>
                     transaction.CreatedAt.ToLocalTime().Date == today &&
-                    transaction.Type is TransactionType.BalanceTopUp or TransactionType.BonusAccrual)
+                    transaction.Type == TransactionType.BalanceTopUp || transaction.Type == TransactionType.BonusAccrual)
                 .Sum(transaction => transaction.Amount),
             AvailableComputers = computers.Count(computer => computer.Status?.Code == ComputerStatusCodes.Available),
             BusyComputers = computers.Count(computer => computer.Status?.Code == ComputerStatusCodes.Busy),
