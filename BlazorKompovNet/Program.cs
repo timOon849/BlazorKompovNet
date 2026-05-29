@@ -1,5 +1,7 @@
+﻿using System.Net;
 using BlazorKompovNet.Components;
 using BlazorKompovNet.Services;
+using BlazorKompovNet.Services.Api;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Security.Claims;
@@ -21,11 +23,30 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddSingleton<ICashierRepository, LocalCashierRepository>();
-builder.Services.AddSingleton<IClubManagementService, LocalClubManagementService>();
-builder.Services.AddSingleton<IDashboardService, LocalDashboardService>();
+builder.Services.Configure<ApiOptions>(builder.Configuration.GetSection("Api"));
+
+var apiBaseUrl = builder.Configuration["Api:BaseUrl"] ?? "http://127.0.0.1:5232";
+builder.Services.AddHttpClient<KompovApiClient>((_, client) =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60);
+    client.DefaultRequestVersion = HttpVersion.Version11;
+    client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+})
+.ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+{
+    UseProxy = false,
+    PooledConnectionLifetime = TimeSpan.FromMinutes(1),
+    ConnectTimeout = TimeSpan.FromSeconds(15),
+    AutomaticDecompression = DecompressionMethods.All
+});
+
+builder.Services.AddScoped<ICashierRepository, ApiCashierRepository>();
+builder.Services.AddScoped<IClubManagementService, ApiClubManagementService>();
+builder.Services.AddScoped<IDashboardService, ApiDashboardService>();
 
 var app = builder.Build();
+
+app.Logger.LogInformation("KompovNet API: {ApiBaseUrl}", apiBaseUrl);
 
 if (!app.Environment.IsDevelopment())
 {
@@ -45,27 +66,34 @@ app.MapPost("/auth/login", async (HttpContext httpContext, ICashierRepository ca
     var userName = form["userName"].ToString();
     var password = form["password"].ToString();
 
-    var cashier = await cashiers.ValidateCredentialsAsync(userName, password);
-    if (cashier is null)
+    try
     {
-        return Results.Redirect("/login?error=1");
+        var cashier = await cashiers.ValidateCredentialsAsync(userName, password);
+        if (cashier is null)
+        {
+            return Results.Redirect("/login?error=1");
+        }
+
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, cashier.Id.ToString()),
+            new(ClaimTypes.Name, cashier.FullName),
+            new(ClaimTypes.Role, cashier.Role.ToString()),
+            new("UserName", cashier.UserName)
+        };
+
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var principal = new ClaimsPrincipal(identity);
+
+        await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+        await cashiers.UpdateLastLoginAsync(cashier.Id);
+
+        return Results.Redirect("/");
     }
-
-    var claims = new List<Claim>
+    catch (InvalidOperationException)
     {
-        new(ClaimTypes.NameIdentifier, cashier.Id.ToString()),
-        new(ClaimTypes.Name, cashier.FullName),
-        new(ClaimTypes.Role, cashier.Role.ToString()),
-        new("UserName", cashier.UserName)
-    };
-
-    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-    var principal = new ClaimsPrincipal(identity);
-
-    await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
-    await cashiers.UpdateLastLoginAsync(cashier.Id);
-
-    return Results.Redirect("/");
+        return Results.Redirect("/login?error=2");
+    }
 }).DisableAntiforgery();
 
 app.MapPost("/auth/logout", async (HttpContext httpContext) =>

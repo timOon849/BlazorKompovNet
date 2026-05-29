@@ -10,10 +10,9 @@ BlazorKompovNet/
 │   ├── Layout/          — шапка, боковое меню
 │   └── Pages/           — экраны: дашборд, клуб, клиенты, сессии…
 ├── Models/              — сущности: клиент, сессия, бронь, тариф…
-├── Services/            — логика и данные (сейчас всё in-memory)
-│   ├── LocalClubManagementService.cs   — основная бизнес-логика
-│   ├── LocalDashboardService.cs        — статистика на главной
-│   └── LocalCashierRepository.cs       — вход кассира (admin/admin)
+├── Services/            — логика через HTTP API (KompovNetApi)
+│   ├── Api/             — клиент, маппинг, ApiClubManagementService…
+│   └── Local*.cs        — старые in-memory реализации (не подключены)
 ├── wwwroot/             — картинки, CSS
 ├── Program.cs           — запуск приложения, регистрация сервисов
 └── appsettings.json     — настройки
@@ -21,13 +20,18 @@ BlazorKompovNet/
 
 ## Как запустить
 
-1. Открыть `BlazorKompovNet.sln` в Visual Studio.
-2. Запустить проект **BlazorKompovNet** (F5).
-3. Войти: логин `admin`, пароль `admin`.
+1. Запустить API: `C:\Users\super\source\repos\KompovNetApi` (`dotnet run`, порт `http://localhost:5232`).
+2. В БД должны быть кассиры, клуб, зоны, ПК (через API или seed).
+3. Открыть `BlazorKompovNet.sln`, запустить **BlazorKompovNet** (F5).
+4. Войти под кассиром из API.
+
+URL API задаётся в `appsettings.json`: `"Api": { "BaseUrl": "http://127.0.0.1:5232" }`.
+
+Если API слушает `0.0.0.0:5232`, используйте **127.0.0.1**, а не `localhost` — на Windows `localhost` может идти по IPv6 и соединение обрывается.
 
 ## Данные
 
-Все данные хранятся **в памяти** при работе приложения (перезапуск — сброс к демо-данным). Отдельной базы данных пока нет.
+Все операции идут в **KompovNetApi** (PostgreSQL). Локальные `Local*` сервисы в репозитории не используются.
 
 ## Страницы
 

@@ -60,6 +60,14 @@ main {
         flex-direction: row;
     }
 
+    .page:not(:has(.sidebar)) {
+        flex-direction: column;
+    }
+
+    .page:not(:has(.sidebar)) main {
+        width: 100%;
+    }
+
     .sidebar {
         width: 250px;
         height: 100vh;

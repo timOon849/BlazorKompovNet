@@ -41,6 +41,13 @@
                         Неверный логин или пароль.
                     </div>
                 }
+                @if (Error == "2")
+                {
+                    <div class="alert alert-danger" role="alert">
+                        API недоступен. Запустите KompovNetApi и проверьте в appsettings.json адрес
+                        <code>http://127.0.0.1:5232</code>.
+                    </div>
+                }
 
                 <form method="post" action="/auth/login">
                     <div class="mb-3">
