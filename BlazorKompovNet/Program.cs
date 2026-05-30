@@ -86,7 +86,15 @@ app.MapPost("/auth/login", async (HttpContext httpContext, ICashierRepository ca
         var principal = new ClaimsPrincipal(identity);
 
         await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
-        await cashiers.UpdateLastLoginAsync(cashier.Id);
+
+        try
+        {
+            await cashiers.UpdateLastLoginAsync(cashier.Id);
+        }
+        catch (InvalidOperationException)
+        {
+            // Вход уже выполнен; обновление lastLogin не должно блокировать авторизацию.
+        }
 
         return Results.Redirect("/");
     }
