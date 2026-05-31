@@ -43,6 +43,7 @@ public interface IClubManagementService
         string lastName,
         string? phoneNumber,
         string? email,
+        DateOnly? birthDate = null,
         string? login = null,
         string? password = null);
 

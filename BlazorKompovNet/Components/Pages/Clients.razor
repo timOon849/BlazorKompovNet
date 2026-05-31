@@ -91,6 +91,10 @@ else
                                     <td>
                                         <div>@(client.PhoneNumber ?? "-")</div>
                                         <div class="text-muted small">@(client.Email ?? "-")</div>
+                                        @if (client.BirthDate is not null)
+                                        {
+                                            <div class="text-muted small">@ModelLabels.FormatBirthDate(client.BirthDate)</div>
+                                        }
                                     </td>
                                     <td>
                                         @if (HasActiveSession(client.Id))

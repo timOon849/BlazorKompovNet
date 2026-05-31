@@ -2,6 +2,8 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @inject IClubManagementService ClubManagementService
+@inject KompovRealtimeHubClient RealtimeHub
+@implements IDisposable
 
 <PageTitle>Клиент</PageTitle>
 
@@ -42,6 +44,9 @@ else
 
                         <dt class="col-sm-4">Телефон</dt>
                         <dd class="col-sm-8">@(client.PhoneNumber ?? "-")</dd>
+
+                        <dt class="col-sm-4">Дата рождения</dt>
+                        <dd class="col-sm-8">@ModelLabels.FormatBirthDate(client.BirthDate)</dd>
 
                         <dt class="col-sm-4">Email</dt>
                         <dd class="col-sm-8">@(client.Email ?? "-")</dd>
@@ -235,10 +240,40 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        RealtimeHub.DataChanged -= OnRealtimeDataChanged;
+        RealtimeHub.DataChanged += OnRealtimeDataChanged;
+
+        await ReloadAsync();
+        var shift = await ClubManagementService.GetCurrentShiftAsync();
+        var clubId = shift?.ClubId
+            ?? sessions.FirstOrDefault()?.ClubId
+            ?? bookings.FirstOrDefault()?.ClubId;
+        await RealtimeHub.EnsureConnectedAsync(clientId: Id, clubId: clubId);
+    }
+
+    private async Task OnRealtimeDataChanged(KompovRealtimeChange change)
+    {
+        if (change.ClientId is int changedClient && changedClient != Id)
+            return;
+
+        await InvokeAsync(async () =>
+        {
+            await ReloadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task ReloadAsync()
+    {
         client = await ClubManagementService.GetClientAsync(Id);
         sessions = await ClubManagementService.GetSessionsAsync();
         transactions = await ClubManagementService.GetTransactionsAsync();
         bookings = await ClubManagementService.GetBookingsAsync();
+    }
+
+    public void Dispose()
+    {
+        RealtimeHub.DataChanged -= OnRealtimeDataChanged;
     }
 
     private static bool IsOpenBooking(Booking booking)

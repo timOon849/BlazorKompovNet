@@ -195,6 +195,7 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
         string lastName,
         string? phoneNumber,
         string? email,
+        DateOnly? birthDate = null,
         string? login = null,
         string? password = null)
     {
@@ -240,6 +241,7 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 LastName = lastName.Trim(),
                 PhoneNumber = normalizedPhone,
                 Email = normalizedEmail,
+                BirthDate = birthDate,
                 Login = normalizedLogin,
                 Password = normalizedPassword,
                 RegisteredAt = DateTime.UtcNow,
@@ -360,24 +362,18 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Укажите положительную сумму пополнения.");
             }
 
-            client.Balance += amount;
-            await api.PutAsync(api.Mobile($"clients/{clientId}"), ApiMapper.ToApiClient(client));
+            var updated = await api.PostAsync<ApiClient>(
+                api.Admin($"clients/{clientId}/balance-top-up"),
+                new
+                {
+                    Amount = amount,
+                    ClubId = clubId!.Value,
+                    PaymentTypeId = paymentTypeId,
+                    CashierShiftId = currentShift.Id
+                });
 
-            var transactionType = paymentType.IsBonus
-                ? TransactionType.BonusAccrual
-                : TransactionType.BalanceTopUp;
-
-            await api.PostAsync(api.Admin("transactions"), new ApiTransaction
-            {
-                ClubId = clubId!.Value,
-                CashierShiftId = currentShift.Id,
-                ClientId = clientId,
-                PaymentTypeId = paymentTypeId,
-                Amount = amount,
-                Type = Enum.Parse<ApiTransactionType>(transactionType),
-                Status = ApiPaymentStatus.Paid,
-                CreatedAt = DateTime.UtcNow
-            });
+            if (updated is null)
+                return ClubOperationResult.Failure("Сервер не вернул обновлённого клиента.");
 
             return ClubOperationResult.Success("Баланс посетителя пополнен.");
         }

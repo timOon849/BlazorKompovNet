@@ -15,6 +15,8 @@ public sealed class Client
 
     public string? Password { get; set; }
 
+    public DateOnly? BirthDate { get; set; }
+
     public DateTime RegisteredAt { get; set; } = DateTime.UtcNow;
 
     public decimal Balance { get; set; }

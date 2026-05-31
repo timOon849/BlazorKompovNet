@@ -62,6 +62,9 @@ public static class ModelLabels
     public static string GetClientDisplayName(Client? client) =>
         client is null ? "Гость (без аккаунта)" : $"{client.FirstName} {client.LastName}".Trim();
 
+    public static string FormatBirthDate(DateOnly? birthDate) =>
+        birthDate?.ToString("dd.MM.yyyy") ?? "-";
+
     public static string FormatTransactionAmount(Transaction transaction)
     {
         var prefix = IsSessionCharge(transaction.Type) ? "-" : "+";

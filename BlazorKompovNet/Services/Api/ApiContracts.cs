@@ -54,6 +54,7 @@ public sealed class ApiClient
     public string? Email { get; set; }
     public string? Login { get; set; }
     public string? Password { get; set; }
+    public DateOnly? BirthDate { get; set; }
     public DateTime RegisteredAt { get; set; }
     public decimal Balance { get; set; }
     public bool IsActive { get; set; } = true;
@@ -100,10 +101,6 @@ public sealed class ApiComputer
     public int ComputerStatusId { get; set; }
     public ApiComputerStatus? Status { get; set; }
     public int ZoneId { get; set; }
-    public string? Processor { get; set; }
-    public string? GraphicsCard { get; set; }
-    public int RamGb { get; set; }
-    public string? Monitor { get; set; }
 }
 
 public sealed class ApiComputerZone

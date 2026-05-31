@@ -42,6 +42,12 @@
                 </div>
 
                 <div class="mb-3">
+                    <label class="form-label" for="birthDate">Дата рождения</label>
+                    <InputDate class="form-control" id="birthDate" @bind-Value="birthDate" />
+                    <div class="form-text">Необязательно для кассы, но нужна для регистрации через клиентское приложение.</div>
+                </div>
+
+                <div class="mb-3">
                     <label class="form-label" for="email">Email</label>
                     <input class="form-control" id="email" type="email" placeholder="guest@example.com" @bind="email" />
                 </div>
@@ -74,6 +80,7 @@
     private string firstName = string.Empty;
     private string lastName = string.Empty;
     private string? phoneNumber;
+    private DateTime? birthDate;
     private string? email;
     private string? login;
     private string? password;
@@ -99,11 +106,16 @@
 
         isSubmitting = true;
 
+        DateOnly? birthDateValue = birthDate.HasValue
+            ? DateOnly.FromDateTime(birthDate.Value)
+            : null;
+
         var result = await ClubManagementService.RegisterClientAsync(
             firstName,
             lastName,
             phoneNumber,
             email,
+            birthDateValue,
             login,
             password);
 
@@ -119,6 +131,7 @@
         firstName = string.Empty;
         lastName = string.Empty;
         phoneNumber = null;
+        birthDate = null;
         email = null;
         login = null;
         password = null;

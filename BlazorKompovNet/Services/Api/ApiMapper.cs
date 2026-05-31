@@ -21,6 +21,7 @@ internal static class ApiMapper
         Email = source.Email,
         Login = source.Login,
         Password = source.Password,
+        BirthDate = source.BirthDate,
         RegisteredAt = source.RegisteredAt,
         Balance = source.Balance,
         IsActive = source.IsActive
@@ -83,11 +84,7 @@ internal static class ApiMapper
             ComputerStatusId = source.ComputerStatusId,
             Status = status,
             ZoneId = source.ZoneId,
-            Zone = zone,
-            Processor = source.Processor,
-            GraphicsCard = source.GraphicsCard,
-            RamGb = source.RamGb,
-            Monitor = source.Monitor
+            Zone = zone
         };
 
         if (zone is not null)
@@ -108,6 +105,15 @@ internal static class ApiMapper
         if (string.IsNullOrWhiteSpace(computer.GraphicsCard) && !string.IsNullOrWhiteSpace(zone.GPU))
         {
             computer.GraphicsCard = zone.GPU.Trim();
+        }
+
+        if (computer.RamGb <= 0 && !string.IsNullOrWhiteSpace(zone.RAM))
+        {
+            var digits = new string(zone.RAM.Where(char.IsDigit).ToArray());
+            if (int.TryParse(digits, out var ramGb))
+            {
+                computer.RamGb = ramGb;
+            }
         }
 
         if (string.IsNullOrWhiteSpace(computer.Monitor))
@@ -246,6 +252,7 @@ internal static class ApiMapper
         Email = source.Email,
         Login = source.Login,
         Password = source.Password,
+        BirthDate = source.BirthDate,
         RegisteredAt = source.RegisteredAt,
         Balance = source.Balance,
         IsActive = source.IsActive
@@ -313,10 +320,6 @@ internal static class ApiMapper
         Number = source.Number,
         Name = source.Name,
         ComputerStatusId = source.ComputerStatusId,
-        ZoneId = source.ZoneId,
-        Processor = source.Processor,
-        GraphicsCard = source.GraphicsCard,
-        RamGb = source.RamGb,
-        Monitor = source.Monitor
+        ZoneId = source.ZoneId
     };
 }

@@ -16,7 +16,9 @@ public sealed class KompovApiClient
         {
             new JsonStringEnumConverter(),
             new UtcDateTimeJsonConverter(),
-            new NullableUtcDateTimeJsonConverter()
+            new NullableUtcDateTimeJsonConverter(),
+            new DateOnlyJsonConverter(),
+            new NullableDateOnlyJsonConverter()
         }
     };
 
