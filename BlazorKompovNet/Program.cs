@@ -43,6 +43,8 @@ builder.Services.AddHttpClient<KompovApiClient>((_, client) =>
 builder.Services.AddScoped<ICashierRepository, ApiCashierRepository>();
 builder.Services.AddScoped<IClubManagementService, ApiClubManagementService>();
 builder.Services.AddScoped<IDashboardService, ApiDashboardService>();
+builder.Services.AddSingleton<ShellHubClient>();
+builder.Services.AddHostedService<ShellHubHostedService>();
 builder.Services.AddHostedService<SessionAutoCompletionHostedService>();
 
 var app = builder.Build();

@@ -3,6 +3,7 @@
 @attribute [Authorize]
 @implements IDisposable
 @inject IClubManagementService ClubManagementService
+@inject ShellHubClient ShellHubClient
 
 <PageTitle>Управление клубом</PageTitle>
 
@@ -678,14 +679,24 @@
 
     protected override async Task OnInitializedAsync()
     {
+        ShellHubClient.SessionChanged += OnShellSessionChangedAsync;
+        await ShellHubClient.EnsureConnectedAsync();
         await LoadDataAsync();
         refreshTimer = new System.Threading.Timer(_ => _ = RefreshSessionsAsync(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
     }
 
     public void Dispose()
     {
+        ShellHubClient.SessionChanged -= OnShellSessionChangedAsync;
         refreshTimer?.Dispose();
     }
+
+    private Task OnShellSessionChangedAsync() =>
+        InvokeAsync(async () =>
+        {
+            await LoadDataAsync();
+            StateHasChanged();
+        });
 
     private async Task RefreshSessionsAsync()
     {
