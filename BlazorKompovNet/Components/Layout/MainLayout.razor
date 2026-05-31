@@ -13,13 +13,18 @@
         <div class="top-row px-4">
             <AuthorizeView>
                 <Authorized>
-                    <span>@context.User.Identity?.Name</span>
-                    <form method="post" action="/auth/logout" class="ms-3">
-                        <button type="submit" class="btn btn-link p-0">�����</button>
-                    </form>
+                    <div class="top-row__user">
+                        <span class="top-row__username">@context.User.Identity?.Name</span>
+                        <form method="post" action="/auth/logout" class="logout-form">
+                            <button type="submit" class="logout-button" title="Выйти из системы">
+                                <span class="logout-button__icon" aria-hidden="true"></span>
+                                <span class="logout-button__label">Выйти</span>
+                            </button>
+                        </form>
+                    </div>
                 </Authorized>
                 <NotAuthorized>
-                    <a href="login">�����</a>
+                    <a class="login-link" href="login">Вход</a>
                 </NotAuthorized>
             </AuthorizeView>
         </div>
@@ -33,5 +38,5 @@
 <div id="blazor-error-ui">
     An unhandled error has occurred.
     <a href="" class="reload">Reload</a>
-    <a class="dismiss">??</a>
+    <a class="dismiss" title="Закрыть">×</a>
 </div>

@@ -30,6 +30,72 @@ main {
     color: var(--app-muted);
 }
 
+.top-row__user {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    min-width: 0;
+}
+
+.top-row__username {
+    color: var(--app-ink);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 16rem;
+}
+
+.logout-form {
+    margin: 0;
+}
+
+.logout-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.42rem 0.85rem;
+    border: 1px solid rgba(194, 65, 12, 0.28);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--app-orange-dark);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.logout-button:hover,
+.logout-button:focus {
+    color: #fff;
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    border-color: #ea580c;
+    box-shadow: 0 0.35rem 0.85rem rgba(234, 88, 12, 0.22);
+}
+
+.logout-button__icon {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 1rem;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23c2410c' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M6 12.5a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-8a.5.5 0 0 0-.5.5v2a.5.5 0 0 1-1 0v-2A1.5 1.5 0 0 1 6.5 2h8A1.5 1.5 0 0 1 16 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 5 12.5v-2a.5.5 0 0 1 1 0z'/%3E%3Cpath fill-rule='evenodd' d='M.146 8.354a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L1.707 7.5H10.5a.5.5 0 0 1 0 1H1.707l2.147 2.146a.5.5 0 0 1-.708.708z'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+
+.logout-button:hover .logout-button__icon,
+.logout-button:focus .logout-button__icon {
+    filter: brightness(0) invert(1);
+}
+
+.login-link {
+    color: var(--app-orange-dark);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.login-link:hover {
+    text-decoration: underline;
+}
+
     .top-row ::deep a, .top-row ::deep .btn-link {
         white-space: nowrap;
         margin-left: 1.5rem;
@@ -48,6 +114,18 @@ main {
 @media (max-width: 640.98px) {
     .top-row {
         justify-content: space-between;
+    }
+
+    .top-row__username {
+        max-width: 9rem;
+    }
+
+    .logout-button__label {
+        display: none;
+    }
+
+    .logout-button {
+        padding: 0.45rem;
     }
 
     .top-row ::deep a, .top-row ::deep .btn-link {
