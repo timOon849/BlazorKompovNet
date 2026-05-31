@@ -138,7 +138,7 @@
                                 @foreach (var computer in zone.Computers)
                                 {
                                     var session = GetActiveSession(computer.Id);
-                                    var booking = GetActiveBooking(computer.Id);
+                                    var booking = GetDisplayableBooking(computer.Id);
 
                                     <tr class="@GetComputerRowClass(computer, session)"
                                         style="cursor: context-menu;"
@@ -151,8 +151,8 @@
                                                 <div>
                                                     <strong>@ComputerDisplay.GetTitle(computer)</strong>
                                                     <div class="text-muted small">@ComputerDisplay.GetSubtitle(computer)</div>
-                                                    <div class="small @GetComputerStateTextClass(computer, session)">
-                                                        @GetComputerStateText(computer, session)
+                                                    <div class="small @GetComputerStateTextClass(computer, session, booking)">
+                                                        @GetComputerStateText(computer, session, booking)
                                                     </div>
                                                 </div>
                                             </div>
@@ -160,7 +160,7 @@
                                         <td>
                                             <div class="d-flex flex-column gap-1">
                                                 <span><span class="badge @GetStatusBadgeClass(computer.Status)">@GetStatusText(computer.Status)</span></span>
-                                                <span class="small text-muted">@GetComputerActionHint(computer, session)</span>
+                                                <span class="small text-muted">@GetComputerActionHint(computer, session, booking)</span>
                                             </div>
                                         </td>
                                         <td>
@@ -170,7 +170,7 @@
                                                 @if (booking is not null)
                                                 {
                                                     <div class="small text-warning-emphasis">
-                                                        Бронь: @GetClientName(booking.Client), @booking.StartsAt.ToString("HH:mm")-@booking.EndsAt.ToString("HH:mm")
+                                                        Бронь: @GetClientName(booking.Client), @FormatBookingPeriod(booking)
                                                     </div>
                                                 }
                                             }
@@ -271,8 +271,16 @@
                     @if (SelectedComputerBooking is not null)
                     {
                         <div class="alert alert-warning">
-                            Клиент из брони уже выбран: <strong>@GetClientName(SelectedComputerBooking.Client)</strong>.
-                            Бронь действует @SelectedComputerBooking.StartsAt.ToString("HH:mm")-@SelectedComputerBooking.EndsAt.ToString("HH:mm").
+                            Бронь: <strong>@FormatBookingPeriod(SelectedComputerBooking)</strong>
+                            · клиент <strong>@GetClientName(SelectedComputerBooking.Client)</strong>.
+                            @if (GetSelectedSessionBookingError() is string bookingError)
+                            {
+                                <div class="mt-2 mb-0">@bookingError</div>
+                            }
+                            else if (GetSelectedSessionBookingNotice() is string bookingNotice)
+                            {
+                                <div class="mt-2 mb-0">@bookingNotice</div>
+                            }
                         </div>
                     }
 
@@ -646,7 +654,7 @@
         type.IsActive
         && !type.IsBonus
         && type.Code is PaymentTypeCodes.Cash or PaymentTypeCodes.Card);
-    private Booking? SelectedComputerBooking => selectedComputer is null ? null : GetActiveBooking(selectedComputer.Id);
+    private Booking? SelectedComputerBooking => selectedComputer is null ? null : GetDisplayableBooking(selectedComputer.Id);
     private bool SelectedClientHasActiveSession => activeSessions.Any(session => session.ClientId == selectedClientId);
     private bool SelectedClientHasInsufficientBalance =>
         selectedClientId != 0
@@ -657,6 +665,7 @@
         HasOpenShift &&
         selectedComputer is not null &&
         selectedTariffId != 0 &&
+        GetSelectedSessionBookingError() is null &&
         (sessionUseAccount
             ? selectedClientId != 0
               && !SelectedClientHasActiveSession
@@ -804,7 +813,7 @@
         sessionUseAccount = true;
         sessionSearchText = null;
         sessionSearchClients = [];
-        selectedClientId = GetActiveBooking(computer.Id)?.ClientId ?? 0;
+        selectedClientId = GetUpcomingBooking(selectedComputer.Id)?.ClientId ?? 0;
         selectedTariffId = tariffs.FirstOrDefault()?.Id ?? 0;
         sessionHours = 1;
         selectedGuestPaymentTypeId = GuestPaymentTypes.FirstOrDefault()?.Id ?? 0;
@@ -1043,10 +1052,67 @@
         return activeSessions.FirstOrDefault(session => session.ComputerId == computerId);
     }
 
-    private Booking? GetActiveBooking(int computerId)
+    private Booking? GetUpcomingBooking(int computerId)
     {
-        return activeBookings.FirstOrDefault(booking => booking.ComputerId == computerId);
+        return activeBookings
+            .Where(booking => booking.ComputerId == computerId && booking.EndsAt > DateTime.UtcNow)
+            .OrderBy(booking => booking.StartsAt)
+            .FirstOrDefault();
     }
+
+    private Booking? GetDisplayableBooking(int computerId)
+    {
+        var booking = GetUpcomingBooking(computerId);
+        return booking is not null && BookingSessionPolicy.IsDisplayable(booking, DateTime.UtcNow)
+            ? booking
+            : null;
+    }
+
+    private static string FormatBookingPeriod(Booking booking) =>
+        $"{ClubDateTime.Format(booking.StartsAt)} — {ClubDateTime.FormatTime(booking.EndsAt)}";
+
+    private string? GetSelectedSessionBookingError()
+    {
+        if (selectedComputer is null)
+            return null;
+
+        var booking = GetUpcomingBooking(selectedComputer.Id);
+        if (booking is null)
+            return null;
+
+        int? clientId = sessionUseAccount && selectedClientId != 0 ? selectedClientId : null;
+        var validation = BookingSessionPolicy.ValidateSessionStart(
+            booking,
+            clientId,
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddHours(1));
+
+        return validation.IsAllowed ? null : validation.ErrorMessage;
+    }
+
+    private string? GetSelectedSessionBookingNotice()
+    {
+        if (selectedComputer is null || SelectedTariff is null)
+            return null;
+
+        var booking = GetUpcomingBooking(selectedComputer.Id);
+        if (booking is null)
+            return null;
+
+        int? clientId = sessionUseAccount && selectedClientId != 0 ? selectedClientId : null;
+        var duration = SelectedTariff.IsHourly
+            ? TimeSpan.FromHours((double)Math.Max(sessionHours, 0.5m))
+            : SelectedTariff.Duration;
+        var validation = BookingSessionPolicy.ValidateSessionStart(
+            booking,
+            clientId,
+            DateTime.UtcNow,
+            DateTime.UtcNow.Add(duration));
+
+        return validation.NoticeMessage;
+    }
+
+    private Booking? GetActiveBooking(int computerId) => GetUpcomingBooking(computerId);
 
     private static string GetClientName(Client? client) => ModelLabels.GetClientDisplayName(client);
 
@@ -1058,7 +1124,13 @@
 
     private bool CanStartSession(Computer computer)
     {
-        return HasOpenShift && computer.Status?.CanStartSession == true;
+        if (!HasOpenShift)
+            return false;
+
+        return computer.Status?.Code is not (
+            ComputerStatusCodes.Maintenance
+            or ComputerStatusCodes.Disabled
+            or ComputerStatusCodes.Busy);
     }
 
     private decimal CalculateSessionPrice()
@@ -1147,7 +1219,7 @@
             };
     }
 
-    private static string GetComputerStateText(Computer computer, GameSession? session)
+    private string GetComputerStateText(Computer computer, GameSession? session, Booking? booking)
     {
         if (session is not null)
         {
@@ -1164,6 +1236,9 @@
                 : "Сессия активна";
         }
 
+        if (booking is not null)
+            return $"Забронирован на {ClubDateTime.Format(booking.StartsAt)}";
+
         return computer.Status?.Code switch
         {
             ComputerStatusCodes.Available => "Готов к запуску",
@@ -1174,22 +1249,24 @@
         };
     }
 
-    private static string GetComputerStateTextClass(Computer computer, GameSession? session)
+    private static string GetComputerStateTextClass(Computer computer, GameSession? session, Booking? booking)
     {
         return session is not null && GameSessionTiming.IsPastPlannedEnd(session)
             ? "text-danger fw-semibold"
-            : computer.Status?.Code switch
-            {
-                ComputerStatusCodes.Available => "text-success",
-                ComputerStatusCodes.Busy => "text-primary",
-                ComputerStatusCodes.Reserved => "text-warning-emphasis",
-                ComputerStatusCodes.Maintenance => "text-danger",
-                ComputerStatusCodes.Disabled => "text-secondary",
-                _ => "text-muted"
-            };
+            : booking is not null
+                ? "text-warning-emphasis"
+                : computer.Status?.Code switch
+                {
+                    ComputerStatusCodes.Available => "text-success",
+                    ComputerStatusCodes.Busy => "text-primary",
+                    ComputerStatusCodes.Reserved => "text-warning-emphasis",
+                    ComputerStatusCodes.Maintenance => "text-danger",
+                    ComputerStatusCodes.Disabled => "text-secondary",
+                    _ => "text-muted"
+                };
     }
 
-    private static string GetComputerActionHint(Computer computer, GameSession? session)
+    private string GetComputerActionHint(Computer computer, GameSession? session, Booking? booking)
     {
         if (session is not null)
         {
@@ -1198,6 +1275,11 @@
                 : GameSessionTiming.IsPastPlannedEnd(session)
                     ? "Сессия скоро завершится"
                     : "Можно продлить или добавить время";
+        }
+
+        if (booking is not null)
+        {
+            return "За час до брони — только клиент брони; раньше — сеанс до −30 мин от начала брони";
         }
 
         return computer.Status?.Code switch

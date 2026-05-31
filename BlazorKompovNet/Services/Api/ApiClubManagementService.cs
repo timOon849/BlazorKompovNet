@@ -513,11 +513,12 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 }
             }
 
+            var bookings = await GetBookingsAsync();
             var validation = ValidateSessionStart(
                 computer,
                 clientId,
                 await GetActiveSessionsAsync(),
-                await GetBookingsAsync());
+                bookings);
             if (validation is not null)
             {
                 return validation;
@@ -542,6 +543,46 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             var totalPrice = tariff.IsHourly
                 ? tariffZone.Price * billedHours
                 : tariffZone.Price;
+
+            var upcomingBooking = GetUpcomingBooking(bookings, computerId);
+            var plannedEndAt = DateTime.UtcNow.Add(duration);
+            var bookingValidation = BookingSessionPolicy.ValidateSessionStart(
+                upcomingBooking,
+                clientId,
+                DateTime.UtcNow,
+                plannedEndAt);
+            if (!bookingValidation.IsAllowed)
+            {
+                return ClubOperationResult.Failure(bookingValidation.ErrorMessage!);
+            }
+
+            string? bookingNotice = bookingValidation.NoticeMessage;
+            if (bookingValidation.PlannedEndAt < plannedEndAt.AddSeconds(-1))
+            {
+                if (tariff.IsHourly)
+                {
+                    var cappedDuration = bookingValidation.PlannedEndAt - DateTime.UtcNow;
+                    if (cappedDuration <= TimeSpan.Zero)
+                    {
+                        return ClubOperationResult.Failure(
+                            bookingValidation.ErrorMessage ?? "Недостаточно времени до брони.");
+                    }
+
+                    billedHours = (decimal)cappedDuration.TotalHours;
+                    duration = cappedDuration;
+                    totalPrice = tariffZone.Price * Math.Max(billedHours, MinHourlyDuration);
+                }
+                else
+                {
+                    return ClubOperationResult.Failure(
+                        $"Выбранный тариф не помещается до брони на {BookingSessionPolicy.FormatBookingStartShort(upcomingBooking!)}. " +
+                        $"Сеанс можно запустить максимум до {ClubDateTime.FormatTime(bookingValidation.PlannedEndAt)}.");
+                }
+            }
+            else
+            {
+                plannedEndAt = bookingValidation.PlannedEndAt;
+            }
 
             int transactionPaymentTypeId;
             if (isGuestSession)
@@ -587,7 +628,7 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 TariffId = tariffId,
                 TariffZoneId = tariffZone.Id,
                 StartedAt = DateTime.UtcNow,
-                PlannedEndAt = DateTime.UtcNow.Add(duration),
+                PlannedEndAt = plannedEndAt,
                 InitialPrice = totalPrice,
                 TotalPrice = totalPrice,
                 Status = ApiGameSessionStatus.Active
@@ -620,7 +661,10 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 await CompleteActiveBookingAsync(computerId, bookingClientId);
             }
 
-            return ClubOperationResult.Success($"Сессия на {computer.Name} запущена.");
+            return ClubOperationResult.Success(
+                bookingNotice is null
+                    ? $"Сессия на {computer.Name} запущена."
+                    : $"Сессия на {computer.Name} запущена. {bookingNotice}");
         }
         catch (Exception ex)
         {
@@ -683,8 +727,40 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Недостаточно средств на балансе посетителя.");
             }
 
+            var bookings = await GetBookingsAsync();
+            var upcomingBooking = GetUpcomingBooking(bookings, session.ComputerId);
+            var proposedEndAt = session.PlannedEndAt.Add(duration);
+            var bookingValidation = BookingSessionPolicy.ValidateSessionExtension(
+                upcomingBooking,
+                session.ClientId,
+                DateTime.UtcNow,
+                proposedEndAt);
+            if (!bookingValidation.IsAllowed)
+            {
+                return ClubOperationResult.Failure(bookingValidation.ErrorMessage!);
+            }
+
+            proposedEndAt = bookingValidation.PlannedEndAt;
+            if (bookingValidation.PlannedEndAt <= session.PlannedEndAt.AddSeconds(1))
+            {
+                return ClubOperationResult.Failure(
+                    bookingValidation.ErrorMessage
+                    ?? "Продление невозможно из-за ближайшей брони.");
+            }
+
+            if (tariff.IsHourly)
+            {
+                var addedDuration = proposedEndAt - session.PlannedEndAt;
+                billedHours = (decimal)addedDuration.TotalHours;
+                price = tariffZone.Price * Math.Max(billedHours, MinHourlyDuration);
+                if (client.Balance < price)
+                {
+                    return ClubOperationResult.Failure("Недостаточно средств на балансе посетителя.");
+                }
+            }
+
             client.Balance -= price;
-            session.PlannedEndAt = session.PlannedEndAt.Add(duration);
+            session.PlannedEndAt = proposedEndAt;
             session.TotalPrice += price;
 
             await api.PutAsync(api.Mobile($"clients/{client.Id}"), ApiMapper.ToApiClient(client));
@@ -711,7 +787,10 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 CreatedAt = DateTime.UtcNow
             });
 
-            return ClubOperationResult.Success("Сеанс продлен по выбранному тарифу.");
+            return ClubOperationResult.Success(
+                bookingValidation.NoticeMessage is null
+                    ? "Сеанс продлен по выбранному тарифу."
+                    : $"Сеанс продлен. {bookingValidation.NoticeMessage}");
         }
         catch (Exception ex)
         {
@@ -744,9 +823,32 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Укажите причину добавления времени.");
             }
 
-            session.PlannedEndAt = session.PlannedEndAt.Add(TimeSpan.FromHours((double)hours));
+            var bookings = await GetBookingsAsync();
+            var upcomingBooking = GetUpcomingBooking(bookings, session.ComputerId);
+            var proposedEndAt = session.PlannedEndAt.Add(TimeSpan.FromHours((double)hours));
+            var bookingValidation = BookingSessionPolicy.ValidateSessionExtension(
+                upcomingBooking,
+                session.ClientId,
+                DateTime.UtcNow,
+                proposedEndAt);
+            if (!bookingValidation.IsAllowed)
+            {
+                return ClubOperationResult.Failure(bookingValidation.ErrorMessage!);
+            }
+
+            if (bookingValidation.PlannedEndAt <= session.PlannedEndAt.AddSeconds(1))
+            {
+                return ClubOperationResult.Failure(
+                    bookingValidation.ErrorMessage
+                    ?? "Добавление времени невозможно из-за ближайшей брони.");
+            }
+
+            session.PlannedEndAt = bookingValidation.PlannedEndAt;
             await api.PutAsync(api.Crm($"sessions/{sessionId}"), ApiMapper.ToApiSession(session));
-            return ClubOperationResult.Success("Время добавлено к сеансу.");
+            return ClubOperationResult.Success(
+                bookingValidation.NoticeMessage is null
+                    ? "Время добавлено к сеансу."
+                    : $"Время добавлено. {bookingValidation.NoticeMessage}");
         }
         catch (Exception ex)
         {
@@ -1170,6 +1272,16 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             return ClubOperationResult.Failure("На компьютере уже идет сессия.");
         }
 
+        var upcomingBooking = GetUpcomingBooking(bookings, computer.Id);
+        if (upcomingBooking is not null
+            && BookingSessionPolicy.IsBeforeBookingStart(upcomingBooking, DateTime.UtcNow)
+            && BookingSessionPolicy.IsWithinActivationWindow(upcomingBooking, DateTime.UtcNow)
+            && clientId != upcomingBooking.ClientId)
+        {
+            return ClubOperationResult.Failure(
+                "За час до брони сеанс может запустить только клиент, оформивший бронь.");
+        }
+
         if (computer.Status?.Code == ComputerStatusCodes.Reserved)
         {
             if (clientId is null)
@@ -1195,4 +1307,13 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
 
         return null;
     }
+
+    private static Booking? GetUpcomingBooking(IReadOnlyList<Booking> bookings, int computerId) =>
+        bookings
+            .Where(booking =>
+                booking.ComputerId == computerId
+                && BookingSessionPolicy.IsRelevantStatus(booking.Status)
+                && booking.EndsAt > DateTime.UtcNow)
+            .OrderBy(booking => booking.StartsAt)
+            .FirstOrDefault();
 }
