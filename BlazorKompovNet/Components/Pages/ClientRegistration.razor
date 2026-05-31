@@ -8,7 +8,7 @@
 <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
     <div>
         <h1>Регистрация гостя</h1>
-        <p class="text-muted mb-0">Создание локальной карточки посетителя компьютерного клуба.</p>
+        <p class="text-muted mb-0">Создание карточки посетителя с полными данными для кассы и мобильного приложения.</p>
     </div>
 
     <a class="btn btn-outline-secondary" href="club-management">К управлению клубом</a>
@@ -16,7 +16,7 @@
 
 @if (!string.IsNullOrWhiteSpace(notification))
 {
-    <div class="alert alert-info">@notification</div>
+    <div class="alert @notificationClass">@notification</div>
 }
 
 <div class="row">
@@ -26,26 +26,45 @@
                 <h2 class="h5 mb-3">Данные гостя</h2>
 
                 <div class="mb-3">
-                    <label class="form-label" for="firstName">Имя</label>
-                    <input class="form-control" id="firstName" @bind="firstName" />
+                    <label class="form-label" for="firstName">Имя <span class="text-danger">*</span></label>
+                    <input class="form-control" id="firstName" @bind="firstName" required />
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label" for="lastName">Фамилия</label>
-                    <input class="form-control" id="lastName" @bind="lastName" />
+                    <label class="form-label" for="lastName">Фамилия <span class="text-danger">*</span></label>
+                    <input class="form-control" id="lastName" @bind="lastName" required />
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label" for="phone">Телефон</label>
                     <input class="form-control" id="phone" placeholder="+7 900 000-00-00" @bind="phoneNumber" />
+                    <div class="form-text">Нужен для поиска гостя на кассе и в мобильном приложении.</div>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label" for="email">Email</label>
-                    <input class="form-control" id="email" type="email" @bind="email" />
+                    <input class="form-control" id="email" type="email" placeholder="guest@example.com" @bind="email" />
                 </div>
 
-                <button class="btn btn-primary" type="button" @onclick="RegisterClientAsync">Зарегистрировать</button>
+                <hr class="my-4" />
+
+                <h2 class="h6 mb-3 text-muted">Доступ в мобильное приложение</h2>
+                <p class="small text-muted">Логин и пароль можно оставить пустыми для гостя без мобильного аккаунта.</p>
+
+                <div class="mb-3">
+                    <label class="form-label" for="login">Логин</label>
+                    <input class="form-control" id="login" @bind="login" autocomplete="off" />
+                    <div class="form-text">Если указан — потребуется пароль для входа в мобильное приложение.</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="password">Пароль</label>
+                    <input class="form-control" id="password" type="password" @bind="password" autocomplete="new-password" />
+                </div>
+
+                <button class="btn btn-primary" type="button" disabled="@isSubmitting" @onclick="RegisterClientAsync">
+                    @(isSubmitting ? "Регистрация..." : "Зарегистрировать")
+                </button>
             </div>
         </div>
     </div>
@@ -56,18 +75,41 @@
     private string lastName = string.Empty;
     private string? phoneNumber;
     private string? email;
+    private string? login;
+    private string? password;
     private string? notification;
+    private string notificationClass = "alert-info";
+    private bool isSubmitting;
 
     private async Task RegisterClientAsync()
     {
         if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
         {
             notification = "Укажите имя и фамилию гостя.";
+            notificationClass = "alert-warning";
             return;
         }
 
-        var result = await ClubManagementService.RegisterClientAsync(firstName, lastName, phoneNumber, email);
+        if (!string.IsNullOrWhiteSpace(login) && string.IsNullOrWhiteSpace(password))
+        {
+            notification = "Укажите пароль для выбранного логина.";
+            notificationClass = "alert-warning";
+            return;
+        }
+
+        isSubmitting = true;
+
+        var result = await ClubManagementService.RegisterClientAsync(
+            firstName,
+            lastName,
+            phoneNumber,
+            email,
+            login,
+            password);
+
+        isSubmitting = false;
         notification = result.Message;
+        notificationClass = result.Succeeded ? "alert-success" : "alert-danger";
 
         if (!result.Succeeded)
         {
@@ -78,5 +120,7 @@
         lastName = string.Empty;
         phoneNumber = null;
         email = null;
+        login = null;
+        password = null;
     }
 }

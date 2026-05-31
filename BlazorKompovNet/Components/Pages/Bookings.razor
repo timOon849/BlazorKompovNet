@@ -33,50 +33,11 @@
 }
 else
 {
-    <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Открытые</p>
-                    <h2 class="h3 mb-0">@FilteredBookings.Count(IsOpenBooking)</h2>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Сегодня</p>
-                    <h2 class="h3 mb-0">@FilteredBookings.Count(booking => booking.StartsAt.Date == DateTime.Today)</h2>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Неявки</p>
-                    <h2 class="h3 mb-0">@FilteredBookings.Count(booking => booking.Status == BookingStatus.NoShow)</h2>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Всего</p>
-                    <h2 class="h3 mb-0">@FilteredBookings.Count()</h2>
-                    <p class="small text-muted mb-0">В истории: @bookings.Count</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="card mb-4">
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-lg-5">
-                    <label class="form-label" for="bookingSearch">Поиск</label>
+        <div class="card-body py-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-lg-4">
+                    <label class="form-label mb-1" for="bookingSearch">Поиск</label>
                     <input class="form-control"
                            id="bookingSearch"
                            placeholder="Клиент, телефон, компьютер или зона"
@@ -85,7 +46,7 @@ else
                 </div>
 
                 <div class="col-md-4 col-lg-3">
-                    <label class="form-label" for="bookingStatus">Статус</label>
+                    <label class="form-label mb-1" for="bookingStatus">Статус</label>
                     <select class="form-select" id="bookingStatus" @bind="statusFilter">
                         <option value="">Все</option>
                         @foreach (var status in BookingStatuses)
@@ -96,7 +57,7 @@ else
                 </div>
 
                 <div class="col-md-4 col-lg-2">
-                    <label class="form-label" for="bookingDate">Дата</label>
+                    <label class="form-label mb-1" for="bookingDate">Дата</label>
                     <select class="form-select" id="bookingDate" @bind="dateFilter">
                         <option value="">Все</option>
                         <option value="Today">Сегодня</option>
@@ -105,9 +66,15 @@ else
                     </select>
                 </div>
 
-                <div class="col-md-4 col-lg-2 d-flex align-items-end">
-                    <button class="btn btn-outline-secondary w-100" type="button" @onclick="ResetFilters">Сбросить</button>
+                <div class="col-md-4 col-lg-2 d-grid">
+                    <button class="btn btn-outline-secondary" type="button" @onclick="ResetFilters">Сбросить</button>
                 </div>
+            </div>
+
+            <div class="text-muted small mt-2">
+                Найдено: @FilteredBookings.Count() из @bookings.Count
+                · Открытых: @FilteredBookings.Count(IsOpenBooking)
+                · Сегодня: @FilteredBookings.Count(booking => ClubDateTime.ClubDate(booking.StartsAt) == ClubDateTime.Today)
             </div>
         </div>
     </div>
@@ -137,15 +104,15 @@ else
                             {
                                 <tr>
                                     <td>
-                                        <strong>@booking.StartsAt.ToString("dd.MM.yyyy HH:mm")</strong>
-                                        <div class="text-muted small">до @booking.EndsAt.ToString("HH:mm")</div>
+                                        <strong>@ClubDateTime.Format(booking.StartsAt)</strong>
+                                        <div class="text-muted small">до @ClubDateTime.FormatTime(booking.EndsAt)</div>
                                     </td>
                                     <td>
                                         <a href="@($"/clients/{booking.ClientId}")">@GetClientName(booking.Client)</a>
                                         <div class="text-muted small">@(booking.Client?.PhoneNumber ?? "-")</div>
                                     </td>
                                     <td>
-                                        <strong>@(booking.Computer?.Name ?? "-")</strong>
+                                        <strong>@ComputerDisplay.GetTitleOrDefault(booking.Computer)</strong>
                                         <div class="text-muted small">@(booking.Zone?.Name ?? booking.Computer?.Zone?.Name ?? "-")</div>
                                     </td>
                                     <td><span class="badge @GetBookingStatusBadgeClass(booking.Status)">@GetBookingStatusText(booking.Status)</span></td>
@@ -189,11 +156,18 @@ else
                 <div class="modal-body">
                     <div class="row g-3">
                         <div class="col-md-6">
+                            <label class="form-label" for="bookingClientSearch">Поиск клиента</label>
+                            <input class="form-control mb-2"
+                                   id="bookingClientSearch"
+                                   placeholder="Имя, телефон или email"
+                                   @bind="clientSearchText"
+                                   @bind:event="oninput" />
                             <label class="form-label" for="bookingClient">Клиент</label>
                             <select class="form-select" id="bookingClient" @bind="selectedClientId">
-                                @foreach (var client in clients)
+                                <option value="0">Выберите клиента</option>
+                                @foreach (var client in FilteredClientsForBooking)
                                 {
-                                    <option value="@client.Id">@GetClientName(client) (@FormatMoney(client.Balance))</option>
+                                    <option value="@client.Id">@GetClientName(client) · @(client.PhoneNumber ?? "без телефона") · @FormatMoney(client.Balance)</option>
                                 }
                             </select>
                         </div>
@@ -201,9 +175,10 @@ else
                         <div class="col-md-6">
                             <label class="form-label" for="bookingComputer">Компьютер</label>
                             <select class="form-select" id="bookingComputer" @bind="selectedComputerId">
+                                <option value="0">Выберите компьютер</option>
                                 @foreach (var computer in AvailableComputers)
                                 {
-                                    <option value="@computer.Id">@computer.Name - @computer.Zone?.Name</option>
+                                    <option value="@computer.Id">@ComputerDisplay.GetListLabel(computer)</option>
                                 }
                             </select>
                         </div>
@@ -217,11 +192,28 @@ else
                             <label class="form-label" for="bookingEnd">Окончание</label>
                             <input class="form-control" id="bookingEnd" type="datetime-local" value="@endsAtText" @onchange="SetEndsAt" />
                         </div>
+
+                        <div class="col-12">
+                            <label class="form-label d-block">Длительность</label>
+                            <div class="btn-group" role="group" aria-label="Быстрый выбор длительности">
+                                <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="() => SetBookingDuration(1)">1 ч</button>
+                                <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="() => SetBookingDuration(2)">2 ч</button>
+                                <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="() => SetBookingDuration(3)">3 ч</button>
+                                <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="() => SetBookingDuration(4)">4 ч</button>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="alert alert-light border mt-3 mb-0">
-                        Бронь проверит пересечения по компьютеру и активные сессии перед созданием.
-                    </div>
+                    @if (!string.IsNullOrWhiteSpace(createFormError))
+                    {
+                        <div class="alert alert-warning mt-3 mb-0">@createFormError</div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-light border mt-3 mb-0">
+                            Бронь проверит пересечения по компьютеру и активные сессии перед созданием.
+                        </div>
+                    }
                 </div>
 
                 <div class="modal-footer">
@@ -242,6 +234,8 @@ else
     private string? statusFilter;
     private string? dateFilter;
     private string? notification;
+    private string? clientSearchText;
+    private string? createFormError;
     private bool showCreateDialog;
     private int selectedClientId;
     private int selectedComputerId;
@@ -256,7 +250,27 @@ else
     private IEnumerable<Computer> AvailableComputers => zones
         .SelectMany(zone => zone.Computers)
         .Where(computer => computer.Status?.Code is not ComputerStatusCodes.Maintenance and not ComputerStatusCodes.Disabled)
-        .OrderBy(computer => computer.Name);
+        .OrderBy(computer => ComputerDisplay.GetTitle(computer));
+
+    private IEnumerable<Client> FilteredClientsForBooking
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(clientSearchText))
+            {
+                return clients.OrderBy(client => client.LastName).ThenBy(client => client.FirstName);
+            }
+
+            var search = clientSearchText.Trim();
+            return clients
+                .Where(client =>
+                    GetClientName(client).Contains(search, StringComparison.OrdinalIgnoreCase)
+                    || (client.PhoneNumber?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (client.Email?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false))
+                .OrderBy(client => client.LastName)
+                .ThenBy(client => client.FirstName);
+        }
+    }
 
     private bool HasOpenShift => currentShift is not null;
 
@@ -264,8 +278,8 @@ else
         HasOpenShift &&
         selectedClientId != 0 &&
         selectedComputerId != 0 &&
-        DateTime.TryParse(startsAtText, out _) &&
-        DateTime.TryParse(endsAtText, out _);
+        TryParseBookingRange(out var startsAt, out var endsAt) &&
+        endsAt > startsAt;
 
     protected override async Task OnInitializedAsync()
     {
@@ -282,23 +296,66 @@ else
 
     private void OpenCreateDialog()
     {
-        selectedClientId = clients.FirstOrDefault()?.Id ?? 0;
+        selectedClientId = 0;
         selectedComputerId = AvailableComputers.FirstOrDefault()?.Id ?? 0;
-        startsAtText = DateTime.Now.AddMinutes(30).ToString("yyyy-MM-ddTHH:mm");
-        endsAtText = DateTime.Now.AddHours(2).ToString("yyyy-MM-ddTHH:mm");
+        clientSearchText = null;
+        createFormError = null;
+        startsAtText = ClubDateTime.Now.AddMinutes(30).ToString("yyyy-MM-ddTHH:mm");
+        endsAtText = ClubDateTime.Now.AddHours(2).ToString("yyyy-MM-ddTHH:mm");
         showCreateDialog = true;
     }
 
     private void CloseCreateDialog()
     {
         showCreateDialog = false;
+        createFormError = null;
+    }
+
+    private void SetBookingDuration(int hours)
+    {
+        if (!DateTime.TryParse(startsAtText, out var startsAt))
+        {
+            startsAt = ClubDateTime.Now.AddMinutes(30);
+            startsAtText = startsAt.ToString("yyyy-MM-ddTHH:mm");
+        }
+
+        endsAtText = startsAt.AddHours(hours).ToString("yyyy-MM-ddTHH:mm");
+        createFormError = null;
+    }
+
+    private bool TryParseBookingRange(out DateTime startsAt, out DateTime endsAt)
+    {
+        startsAt = default;
+        endsAt = default;
+        return DateTime.TryParse(startsAtText, out startsAt)
+            && DateTime.TryParse(endsAtText, out endsAt);
     }
 
     private async Task CreateBookingAsync()
     {
-        if (!DateTime.TryParse(startsAtText, out var startsAt) || !DateTime.TryParse(endsAtText, out var endsAt))
+        createFormError = null;
+
+        if (selectedClientId == 0)
         {
-            notification = "Укажите корректное время бронирования.";
+            createFormError = "Выберите клиента.";
+            return;
+        }
+
+        if (selectedComputerId == 0)
+        {
+            createFormError = "Выберите компьютер.";
+            return;
+        }
+
+        if (!TryParseBookingRange(out var startsAt, out var endsAt))
+        {
+            createFormError = "Укажите корректное время бронирования.";
+            return;
+        }
+
+        if (endsAt <= startsAt)
+        {
+            createFormError = "Время окончания должно быть позже начала.";
             return;
         }
 
@@ -308,6 +365,10 @@ else
         if (result.Succeeded)
         {
             CloseCreateDialog();
+        }
+        else
+        {
+            createFormError = result.Message;
         }
 
         await LoadDataAsync();
@@ -356,9 +417,9 @@ else
     {
         return dateFilter switch
         {
-            "Today" => booking.StartsAt.Date == DateTime.Today,
-            "Future" => booking.StartsAt >= DateTime.Now,
-            "Past" => booking.EndsAt < DateTime.Now,
+            "Today" => ClubDateTime.ClubDate(booking.StartsAt) == ClubDateTime.Today,
+            "Future" => booking.StartsAt >= DateTime.UtcNow,
+            "Past" => booking.EndsAt < DateTime.UtcNow,
             _ => true
         };
     }
@@ -373,11 +434,13 @@ else
     private void SetStartsAt(ChangeEventArgs args)
     {
         startsAtText = args.Value?.ToString() ?? string.Empty;
+        createFormError = null;
     }
 
     private void SetEndsAt(ChangeEventArgs args)
     {
         endsAtText = args.Value?.ToString() ?? string.Empty;
+        createFormError = null;
     }
 
     private static bool IsOpenBooking(Booking booking)

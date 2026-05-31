@@ -168,7 +168,7 @@ public sealed class ApiGameSession
     public int Id { get; set; }
     public int ClubId { get; set; }
     public int ComputerId { get; set; }
-    public int ClientId { get; set; }
+    public int? ClientId { get; set; }
     public int CashierShiftId { get; set; }
     public int TariffId { get; set; }
     public int TariffZoneId { get; set; }

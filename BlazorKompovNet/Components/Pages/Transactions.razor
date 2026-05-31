@@ -23,107 +23,11 @@
 }
 else
 {
-    <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card h-100 border-success">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Поступления</p>
-                    <h2 class="h3 mb-0">@FormatMoney(TotalIncome)</h2>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100 border-primary">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Списания за сессии</p>
-                    <h2 class="h3 mb-0">@FormatMoney(TotalSessionCharges)</h2>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Выборка</p>
-                    <h2 class="h3 mb-0">@FormatMoney(TotalIncome)</h2>
-                    <p class="small text-muted mb-0">Только пополнения (без списаний за сессии)</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Операций</p>
-                    <h2 class="h3 mb-0">@FilteredTransactions.Count()</h2>
-                    <p class="small text-muted mb-0">Всего в истории: @transactions.Count</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row g-3 mb-4">
-        <div class="col-md-2">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Наличные</p>
-                    <h3 class="h5 mb-0">@FormatMoney(PaymentTotal("Cash"))</h3>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-2">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Карта</p>
-                    <h3 class="h5 mb-0">@FormatMoney(PaymentTotal("Card"))</h3>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-2">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">СБП</p>
-                    <h3 class="h5 mb-0">@FormatMoney(PaymentTotal("Sbp"))</h3>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-2">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Баланс</p>
-                    <h3 class="h5 mb-0">@FormatMoney(PaymentTotal("Balance"))</h3>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-2">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Бонусы</p>
-                    <h3 class="h5 mb-0">@FormatMoney(BonusTotal)</h3>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-2">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Смена</p>
-                    <h3 class="h5 mb-0">@FormatMoney(CurrentShiftTotal)</h3>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="card mb-4">
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-lg-4">
-                    <label class="form-label" for="transactionSearch">Поиск</label>
+        <div class="card-body py-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-lg-3">
+                    <label class="form-label mb-1" for="transactionSearch">Поиск</label>
                     <input class="form-control"
                            id="transactionSearch"
                            placeholder="Клиент, тип или способ оплаты"
@@ -132,7 +36,7 @@ else
                 </div>
 
                 <div class="col-md-4 col-lg-2">
-                    <label class="form-label" for="transactionType">Тип</label>
+                    <label class="form-label mb-1" for="transactionType">Тип</label>
                     <select class="form-select" id="transactionType" @bind="typeFilter">
                         <option value="">Все типы</option>
                         @foreach (var type in TransactionTypes)
@@ -143,7 +47,7 @@ else
                 </div>
 
                 <div class="col-md-4 col-lg-2">
-                    <label class="form-label" for="transactionStatus">Статус</label>
+                    <label class="form-label mb-1" for="transactionStatus">Статус</label>
                     <select class="form-select" id="transactionStatus" @bind="statusFilter">
                         <option value="">Все</option>
                         @foreach (var status in PaymentStatuses)
@@ -154,7 +58,18 @@ else
                 </div>
 
                 <div class="col-md-4 col-lg-2">
-                    <label class="form-label" for="transactionPeriod">Период</label>
+                    <label class="form-label mb-1" for="transactionPayment">Оплата</label>
+                    <select class="form-select" id="transactionPayment" @bind="paymentTypeFilter">
+                        <option value="">Все способы</option>
+                        @foreach (var paymentType in paymentTypes)
+                        {
+                            <option value="@paymentType.Id">@paymentType.Name</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-md-4 col-lg-2">
+                    <label class="form-label mb-1" for="transactionPeriod">Период</label>
                     <select class="form-select" id="transactionPeriod" @bind="periodFilter">
                         <option value="">Все даты</option>
                         <option value="Today">Сегодня</option>
@@ -163,22 +78,28 @@ else
                     </select>
                 </div>
 
-                <div class="col-md-4 col-lg-2 d-flex align-items-end">
-                    <button class="btn btn-outline-secondary w-100" type="button" @onclick="ResetFilters">Сбросить</button>
+                <div class="col-md-4 col-lg-1 d-grid">
+                    <button class="btn btn-outline-secondary" type="button" @onclick="ResetFilters">Сброс</button>
                 </div>
 
                 @if (periodFilter == "Custom")
                 {
-                    <div class="col-md-4 col-lg-3">
-                        <label class="form-label" for="transactionDateFrom">С</label>
+                    <div class="col-md-4 col-lg-2">
+                        <label class="form-label mb-1" for="transactionDateFrom">С</label>
                         <input class="form-control" id="transactionDateFrom" type="date" value="@dateFromText" @onchange="SetDateFrom" />
                     </div>
 
-                    <div class="col-md-4 col-lg-3">
-                        <label class="form-label" for="transactionDateTo">По</label>
+                    <div class="col-md-4 col-lg-2">
+                        <label class="form-label mb-1" for="transactionDateTo">По</label>
                         <input class="form-control" id="transactionDateTo" type="date" value="@dateToText" @onchange="SetDateTo" />
                     </div>
                 }
+            </div>
+
+            <div class="text-muted small mt-2">
+                Найдено: @FilteredTransactions.Count() из @transactions.Count
+                · Поступления: @FormatMoney(TotalIncome)
+                · Списания: @FormatMoney(TotalSessionCharges)
             </div>
         </div>
     </div>
@@ -209,8 +130,8 @@ else
                             {
                                 <tr>
                                     <td>
-                                        <strong>@transaction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</strong>
-                                        <div class="text-muted small">@transaction.CreatedAt.ToLocalTime().ToString("HH:mm")</div>
+                                        <strong>@ClubDateTime.Format(transaction.CreatedAt, "dd.MM.yyyy")</strong>
+                                        <div class="text-muted small">@ClubDateTime.FormatTime(transaction.CreatedAt)</div>
                                     </td>
                                     <td>@ModelLabels.GetTransactionTypeText(transaction.Type)</td>
                                     <td>@GetClientName(transaction.Client)</td>
@@ -240,10 +161,12 @@ else
 
 @code {
     private IReadOnlyList<Transaction>? transactions;
+    private IReadOnlyList<PaymentType> paymentTypes = [];
     private CashierShift? currentShift;
     private string? searchText;
     private string? typeFilter;
     private string? statusFilter;
+    private string? paymentTypeFilter;
     private string? periodFilter;
     private string? dateFromText;
     private string? dateToText;
@@ -261,18 +184,11 @@ else
 
     private decimal TotalIncome => FilteredTransactions
         .Where(transaction => !IsSessionCharge(transaction))
+        .Where(ModelLabels.CountsTowardRevenue)
         .Sum(transaction => transaction.Amount);
 
     private decimal TotalSessionCharges => FilteredTransactions
         .Where(IsSessionCharge)
-        .Sum(transaction => transaction.Amount);
-
-    private decimal BonusTotal => FilteredTransactions
-        .Where(transaction => transaction.PaymentType?.IsBonus == true)
-        .Sum(transaction => transaction.Amount);
-
-    private decimal CurrentShiftTotal => FilteredTransactions
-        .Where(transaction => transaction.CashierShiftId == CurrentShiftId)
         .Sum(transaction => transaction.Amount);
 
     private int? CurrentShiftId => currentShift?.Id;
@@ -287,17 +203,23 @@ else
     private async Task LoadTransactionsAsync()
     {
         transactions = await ClubManagementService.GetTransactionsAsync();
+        paymentTypes = await ClubManagementService.GetPaymentTypesAsync();
         currentShift = await ClubManagementService.GetCurrentShiftAsync();
     }
 
     private bool MatchesFilters(Transaction transaction)
     {
-        if (typeFilter is not null && transaction.Type != typeFilter)
+        if (!string.IsNullOrWhiteSpace(typeFilter) && transaction.Type != typeFilter)
         {
             return false;
         }
 
         if (!string.IsNullOrWhiteSpace(statusFilter) && transaction.Status.ToString() != statusFilter)
+        {
+            return false;
+        }
+
+        if (int.TryParse(paymentTypeFilter, out var paymentTypeId) && transaction.PaymentTypeId != paymentTypeId)
         {
             return false;
         }
@@ -324,6 +246,7 @@ else
         searchText = null;
         typeFilter = null;
         statusFilter = null;
+        paymentTypeFilter = null;
         periodFilter = null;
         dateFromText = null;
         dateToText = null;
@@ -341,10 +264,10 @@ else
 
     private bool MatchesPeriod(Transaction transaction)
     {
-        var date = transaction.CreatedAt.ToLocalTime().Date;
+        var date = ClubDateTime.ClubDate(transaction.CreatedAt);
         return periodFilter switch
         {
-            "Today" => date == DateTime.Today,
+            "Today" => date == ClubDateTime.Today,
             "Shift" => CurrentShiftId is not null && transaction.CashierShiftId == CurrentShiftId,
             "Custom" => MatchesCustomPeriod(date),
             _ => true
@@ -364,13 +287,6 @@ else
         }
 
         return true;
-    }
-
-    private decimal PaymentTotal(string paymentCode)
-    {
-        return FilteredTransactions
-            .Where(transaction => transaction.PaymentType?.Code == paymentCode)
-            .Sum(transaction => transaction.Amount);
     }
 
     private static bool IsSessionCharge(Transaction transaction)
@@ -430,7 +346,7 @@ else
         {
             builder.AppendLine(string.Join(';',
                 EscapeCsv(transaction.Id.ToString()),
-                EscapeCsv(transaction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")),
+                EscapeCsv(ClubDateTime.Format(transaction.CreatedAt)),
                 EscapeCsv(ModelLabels.GetTransactionTypeText(transaction.Type)),
                 EscapeCsv(GetClientName(transaction.Client)),
                 EscapeCsv(transaction.PaymentType?.Name ?? "-"),

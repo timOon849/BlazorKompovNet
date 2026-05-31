@@ -11,8 +11,7 @@ BlazorKompovNet/
 │   └── Pages/           — экраны: дашборд, клуб, клиенты, сессии…
 ├── Models/              — сущности: клиент, сессия, бронь, тариф…
 ├── Services/            — логика через HTTP API (KompovNetApi)
-│   ├── Api/             — клиент, маппинг, ApiClubManagementService…
-│   └── Local*.cs        — старые in-memory реализации (не подключены)
+│   └── Api/             — клиент, маппинг, сервисы CRM
 ├── wwwroot/             — картинки, CSS
 ├── Program.cs           — запуск приложения, регистрация сервисов
 └── appsettings.json     — настройки
@@ -31,7 +30,7 @@ URL API задаётся в `appsettings.json`: `"Api": { "BaseUrl": "http://127
 
 ## Данные
 
-Все операции идут в **KompovNetApi** (PostgreSQL). Локальные `Local*` сервисы в репозитории не используются.
+Все операции идут в **KompovNetApi** (PostgreSQL).
 
 ## Страницы
 

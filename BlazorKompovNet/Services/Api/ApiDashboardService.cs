@@ -15,12 +15,36 @@ public sealed class ApiDashboardService(KompovApiClient api) : IDashboardService
         }
 
         var currentClub = stats.CurrentClub is null ? null : ApiMapper.ToClub(stats.CurrentClub);
+        var clubId = currentClub?.Id;
+        var context = await api.GetAsync<ApiAdminPanelContext>(api.Admin("context"));
+        var paymentTypes = context?.PaymentTypes ?? [];
+
+        var transactions = (await api.GetListAsync<ApiTransaction>(api.Admin("transactions")))
+            .Where(transaction => clubId is null || transaction.ClubId == clubId)
+            .Select(transaction =>
+            {
+                var mapped = ApiMapper.ToTransaction(transaction, currentClub);
+                var paymentType = paymentTypes.FirstOrDefault(type => type.Id == transaction.PaymentTypeId);
+                if (paymentType is not null)
+                {
+                    mapped.PaymentType = ApiMapper.ToPaymentType(paymentType);
+                }
+
+                return mapped;
+            })
+            .ToList();
+
+        var revenueToday = ShiftAccounting.GetTodayRevenue(transactions);
+        var revenueCurrentShift = stats.CurrentShift is null
+            ? 0
+            : ShiftAccounting.GetShiftRevenue(transactions, stats.CurrentShift.Id);
+
         return new DashboardStats
         {
             CurrentClub = currentClub,
             AvailableClubs = stats.AvailableClubs.Select(ApiMapper.ToClub).ToList(),
-            RevenueToday = stats.RevenueToday,
-            RevenueCurrentShift = stats.RevenueCurrentShift,
+            RevenueToday = revenueToday,
+            RevenueCurrentShift = revenueCurrentShift,
             VisitorsToday = stats.VisitorsToday,
             ActiveVisitors = stats.ActiveVisitors,
             AvailableComputers = stats.AvailableComputers,

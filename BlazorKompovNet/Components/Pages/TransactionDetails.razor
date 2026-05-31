@@ -21,7 +21,12 @@ else
     <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
         <div>
             <h1>Транзакция #@transaction.Id</h1>
-            <p class="text-muted mb-0">@ModelLabels.GetTransactionTypeText(transaction.Type)</p>
+            <p class="text-muted mb-0">
+                @ModelLabels.GetTransactionTypeText(transaction.Type)
+                · @GetStatusText(transaction.Status)
+                · @FormatTransactionAmount(transaction)
+                · @ClubDateTime.Format(transaction.CreatedAt)
+            </p>
         </div>
 
         <div class="d-flex gap-2">
@@ -33,53 +38,96 @@ else
         </div>
     </div>
 
-    <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <div class="card h-100 @(IsSessionCharge(transaction) ? "border-primary" : "border-success")">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Сумма</p>
-                    <h2 class="h3 mb-0 @(IsSessionCharge(transaction) ? "text-primary" : "text-success")">
-                        @FormatTransactionAmount(transaction)
-                    </h2>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Статус</p>
-                    <span class="badge @GetStatusBadgeClass(transaction.Status)">@GetStatusText(transaction.Status)</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Дата</p>
-                    <h2 class="h5 mb-0">@transaction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</h2>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="card">
         <div class="card-body">
             <h2 class="h5 mb-3">Подробности</h2>
 
             <dl class="row mb-0">
+                <dt class="col-sm-4">ID транзакции</dt>
+                <dd class="col-sm-8">@transaction.Id</dd>
+
                 <dt class="col-sm-4">Тип операции</dt>
-                <dd class="col-sm-8">@ModelLabels.GetTransactionTypeText(transaction.Type)</dd>
+                <dd class="col-sm-8">@ModelLabels.GetTransactionTypeText(transaction.Type) (@transaction.Type)</dd>
+
+                <dt class="col-sm-4">Сумма</dt>
+                <dd class="col-sm-8">@FormatTransactionAmount(transaction)</dd>
+
+                <dt class="col-sm-4">Статус</dt>
+                <dd class="col-sm-8">@GetStatusText(transaction.Status) (@transaction.Status)</dd>
+
+                <dt class="col-sm-4">Дата создания</dt>
+                <dd class="col-sm-8">@ClubDateTime.Format(transaction.CreatedAt, "dd.MM.yyyy HH:mm:ss")</dd>
+
+                <dt class="col-sm-4">Клуб</dt>
+                <dd class="col-sm-8">
+                    @if (transaction.Club is not null)
+                    {
+                        <span>@transaction.Club.Name (ID @transaction.ClubId)</span>
+                    }
+                    else
+                    {
+                        <span>ID @transaction.ClubId</span>
+                    }
+                </dd>
 
                 <dt class="col-sm-4">Клиент</dt>
-                <dd class="col-sm-8">@GetClientName(transaction.Client)</dd>
+                <dd class="col-sm-8">
+                    @if (transaction.ClientId is null)
+                    {
+                        <span>-</span>
+                    }
+                    else if (transaction.Client is not null)
+                    {
+                        <a href="@($"/clients/{transaction.ClientId}")">@GetClientName(transaction.Client)</a>
+                        @if (!string.IsNullOrWhiteSpace(transaction.Client.PhoneNumber))
+                        {
+                            <span class="text-muted"> · @transaction.Client.PhoneNumber</span>
+                        }
+                        <span class="text-muted"> · ID @transaction.ClientId</span>
+                    }
+                    else
+                    {
+                        <span>ID @transaction.ClientId</span>
+                    }
+                </dd>
 
                 <dt class="col-sm-4">Способ оплаты</dt>
-                <dd class="col-sm-8">@(transaction.PaymentType?.Name ?? "-")</dd>
+                <dd class="col-sm-8">
+                    @if (transaction.PaymentType is not null)
+                    {
+                        <span>@transaction.PaymentType.Name</span>
+                        @if (!string.IsNullOrWhiteSpace(transaction.PaymentType.Code))
+                        {
+                            <span class="text-muted"> (@transaction.PaymentType.Code)</span>
+                        }
+                        @if (transaction.PaymentType.IsBonus)
+                        {
+                            <span class="badge text-bg-info ms-1">Бонусы</span>
+                        }
+                        <span class="text-muted"> · ID @transaction.PaymentTypeId</span>
+                    }
+                    else
+                    {
+                        <span>ID @transaction.PaymentTypeId</span>
+                    }
+                </dd>
 
-                <dt class="col-sm-4">Смена</dt>
-                <dd class="col-sm-8">@GetShiftText(transaction.CashierShift)</dd>
+                <dt class="col-sm-4">Смена кассира</dt>
+                <dd class="col-sm-8">
+                    @if (transaction.CashierShiftId is null)
+                    {
+                        <span>-</span>
+                    }
+                    else if (transaction.CashierShift is not null)
+                    {
+                        <span>@GetShiftText(transaction.CashierShift)</span>
+                        <span class="text-muted"> · ID @transaction.CashierShiftId</span>
+                    }
+                    else
+                    {
+                        <span>ID @transaction.CashierShiftId</span>
+                    }
+                </dd>
 
                 <dt class="col-sm-4">Игровая сессия</dt>
                 <dd class="col-sm-8">
@@ -92,12 +140,6 @@ else
                         <a href="@($"/sessions/{transaction.GameSessionId}")">Сессия #@transaction.GameSessionId</a>
                     }
                 </dd>
-
-                <dt class="col-sm-4">Клуб</dt>
-                <dd class="col-sm-8">@(transaction.Club?.Name ?? "-")</dd>
-
-                <dt class="col-sm-4">Технический тип</dt>
-                <dd class="col-sm-8">@ModelLabels.GetTransactionTypeText(transaction.Type)</dd>
             </dl>
         </div>
     </div>
@@ -128,7 +170,8 @@ else
     {
         return shift is null
             ? "-"
-            : $"{shift.Cashier?.FullName ?? "Кассир"} · {shift.OpenedAt:dd.MM.yyyy HH:mm}";
+            : $"{shift.Cashier?.FullName ?? "Кассир"} · открыта {ClubDateTime.Format(shift.OpenedAt)}"
+               + (shift.ClosedAt is null ? " · открыта" : $" · закрыта {ClubDateTime.Format(shift.ClosedAt.Value)}");
     }
 
     private static string GetStatusText(string status)
@@ -140,18 +183,6 @@ else
             PaymentStatus.Refunded => "Возврат",
             PaymentStatus.Cancelled => "Отменено",
             _ => status
-        };
-    }
-
-    private static string GetStatusBadgeClass(string status)
-    {
-        return status switch
-        {
-            PaymentStatus.Paid => "text-bg-success",
-            PaymentStatus.Pending => "text-bg-warning",
-            PaymentStatus.Refunded => "text-bg-info",
-            PaymentStatus.Cancelled => "text-bg-secondary",
-            _ => "text-bg-light"
         };
     }
 

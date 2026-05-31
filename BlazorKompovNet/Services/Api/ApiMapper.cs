@@ -59,21 +59,83 @@ internal static class ApiMapper
         CanStartSession = source.CanStartSession
     };
 
-    public static Computer ToComputer(ApiComputer source, ComputerZone? zone = null) => new()
+    public static Computer ToComputer(
+        ApiComputer source,
+        ComputerZone? zone = null,
+        IReadOnlyList<ApiComputerStatus>? statuses = null)
     {
-        Id = source.Id,
-        ClubId = source.ClubId,
-        Number = source.Number,
-        Name = source.Name ?? source.Number,
-        ComputerStatusId = source.ComputerStatusId,
-        Status = source.Status is null ? null : ToComputerStatus(source.Status),
-        ZoneId = source.ZoneId,
-        Zone = zone,
-        Processor = source.Processor,
-        GraphicsCard = source.GraphicsCard,
-        RamGb = source.RamGb,
-        Monitor = source.Monitor
-    };
+        var status = source.Status is null ? null : ToComputerStatus(source.Status);
+        if (status is null && statuses is not null)
+        {
+            var matched = statuses.FirstOrDefault(item => item.Id == source.ComputerStatusId);
+            if (matched is not null)
+            {
+                status = ToComputerStatus(matched);
+            }
+        }
+
+        var computer = new Computer
+        {
+            Id = source.Id,
+            ClubId = source.ClubId,
+            Number = source.Number,
+            Name = source.Name ?? source.Number,
+            ComputerStatusId = source.ComputerStatusId,
+            Status = status,
+            ZoneId = source.ZoneId,
+            Zone = zone,
+            Processor = source.Processor,
+            GraphicsCard = source.GraphicsCard,
+            RamGb = source.RamGb,
+            Monitor = source.Monitor
+        };
+
+        if (zone is not null)
+        {
+            ApplyZoneHardware(computer, zone);
+        }
+
+        return computer;
+    }
+
+    public static void ApplyZoneHardware(Computer computer, ComputerZone zone)
+    {
+        if (string.IsNullOrWhiteSpace(computer.Processor) && !string.IsNullOrWhiteSpace(zone.CPU))
+        {
+            computer.Processor = zone.CPU.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(computer.GraphicsCard) && !string.IsNullOrWhiteSpace(zone.GPU))
+        {
+            computer.GraphicsCard = zone.GPU.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(computer.Monitor))
+        {
+            computer.Monitor = BuildZoneMonitorLabel(zone);
+        }
+    }
+
+    private static string? BuildZoneMonitorLabel(ComputerZone zone)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(zone.MonitorSize))
+        {
+            parts.Add(zone.MonitorSize.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(zone.MonitorResolution))
+        {
+            parts.Add(zone.MonitorResolution.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(zone.MonitorHz))
+        {
+            parts.Add($"{zone.MonitorHz.Trim()} Гц");
+        }
+
+        return parts.Count == 0 ? null : string.Join(" · ", parts);
+    }
 
     public static ComputerZone ToZone(ApiComputerZone source, Club? club = null)
     {
@@ -83,7 +145,13 @@ internal static class ApiMapper
             ClubId = source.ClubId,
             Club = club,
             Name = source.Name,
-            Description = source.Description
+            Description = source.Description,
+            CPU = source.CPU,
+            GPU = source.GPU,
+            RAM = source.RAM,
+            MonitorResolution = source.MonitorResolution,
+            MonitorHz = source.MonitorHz,
+            MonitorSize = source.MonitorSize
         };
 
         zone.Computers = source.Computers

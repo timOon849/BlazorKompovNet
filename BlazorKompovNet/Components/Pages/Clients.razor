@@ -23,45 +23,40 @@
 }
 else
 {
-    <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Клиентов</p>
-                    <h2 class="h3 mb-0">@FilteredClients.Count()</h2>
-                    <p class="small text-muted mb-0">Всего в базе: @clients.Count</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Общий баланс</p>
-                    <h2 class="h3 mb-0">@FormatMoney(FilteredClients.Sum(client => client.Balance))</h2>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Сейчас играют</p>
-                    <h2 class="h3 mb-0">@FilteredClients.Count(client => HasActiveSession(client.Id))</h2>
-                    <p class="small text-muted mb-0">Активных броней: @FilteredClients.Sum(client => ActiveBookingCount(client.Id))</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="card mb-4">
-        <div class="card-body">
-            <label class="form-label" for="clientSearch">Поиск клиента</label>
-            <input class="form-control"
-                   id="clientSearch"
-                   placeholder="Имя, фамилия, телефон или email"
-                   @bind="searchText"
-                   @bind:event="oninput" />
+        <div class="card-body py-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-lg-5">
+                    <label class="form-label mb-1" for="clientSearch">Поиск</label>
+                    <input class="form-control"
+                           id="clientSearch"
+                           placeholder="Имя, фамилия, телефон или email"
+                           @bind="searchText"
+                           @bind:event="oninput" />
+                </div>
+
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label mb-1" for="clientActivity">Активность</label>
+                    <select class="form-select" id="clientActivity" @bind="activityFilter">
+                        <option value="">Все клиенты</option>
+                        <option value="Playing">Сейчас играют</option>
+                        <option value="Booking">Есть активная бронь</option>
+                        <option value="Inactive">Без сессии и брони</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4 col-lg-2 d-grid">
+                    <button class="btn btn-outline-secondary" type="button" @onclick="ResetFilters">Сбросить</button>
+                </div>
+            </div>
+
+            <div class="text-muted small mt-2">
+                Найдено: @FilteredClients.Count() из @clients.Count
+                @if (FilteredClients.Any())
+                {
+                    <span> · Общий баланс: @FormatMoney(FilteredClients.Sum(client => client.Balance))</span>
+                }
+            </div>
         </div>
     </div>
 
@@ -91,7 +86,7 @@ else
                                 <tr>
                                     <td>
                                         <strong>@GetClientName(client)</strong>
-                                        <div class="text-muted small">С @client.RegisteredAt.ToLocalTime().ToString("dd.MM.yyyy")</div>
+                                        <div class="text-muted small">С @ClubDateTime.Format(client.RegisteredAt, "dd.MM.yyyy")</div>
                                     </td>
                                     <td>
                                         <div>@(client.PhoneNumber ?? "-")</div>
@@ -130,9 +125,11 @@ else
     private IReadOnlyList<GameSession> sessions = [];
     private IReadOnlyList<Booking> bookings = [];
     private string? searchText;
+    private string? activityFilter;
 
     private IEnumerable<Client> FilteredClients => clients?
         .Where(MatchesSearch)
+        .Where(MatchesActivity)
         .OrderBy(client => client.LastName)
         .ThenBy(client => client.FirstName)
         ?? Enumerable.Empty<Client>();
@@ -159,7 +156,25 @@ else
         var search = searchText.Trim();
         return GetClientName(client).Contains(search, StringComparison.OrdinalIgnoreCase)
             || (client.PhoneNumber?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
-            || (client.Email?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
+            || (client.Email?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (client.Login?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private bool MatchesActivity(Client client)
+    {
+        return activityFilter switch
+        {
+            "Playing" => HasActiveSession(client.Id),
+            "Booking" => ActiveBookingCount(client.Id) > 0 && !HasActiveSession(client.Id),
+            "Inactive" => !HasActiveSession(client.Id) && ActiveBookingCount(client.Id) == 0,
+            _ => true
+        };
+    }
+
+    private void ResetFilters()
+    {
+        searchText = null;
+        activityFilter = null;
     }
 
     private bool HasActiveSession(int clientId)

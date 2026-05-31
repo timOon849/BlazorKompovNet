@@ -151,11 +151,17 @@ a, .btn-link {
 
 @media (min-width: 641px) {
     .page:has(.sidebar-collapse-toggle:checked) .sidebar {
-        width: 5.25rem;
+        width: 6.75rem;
+    }
+
+    .page:has(.sidebar-collapse-toggle:checked) .top-row .container-fluid {
+        justify-content: center;
+        position: relative;
     }
 
     .page:has(.sidebar-collapse-toggle:checked) .navbar-brand {
         justify-content: center;
+        margin: 0 auto;
     }
 
     .page:has(.sidebar-collapse-toggle:checked) .nav-label {
@@ -164,22 +170,45 @@ a, .btn-link {
 
     .page:has(.sidebar-collapse-toggle:checked) .sidebar-collapse-button {
         position: absolute;
-        right: 0.35rem;
-        top: 1.6rem;
+        right: 0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+    .page:has(.sidebar-collapse-toggle:checked) .nav-section__title {
+        display: none;
+    }
+
+    .page:has(.sidebar-collapse-toggle:checked) .sidebar-nav {
+        padding: 0.5rem 0.4rem 1rem;
+        align-items: center;
+    }
+
+    .page:has(.sidebar-collapse-toggle:checked) .nav-section {
+        width: 100%;
+        margin-bottom: 0.15rem;
     }
 
     .page:has(.sidebar-collapse-toggle:checked) .nav-item {
-        padding-left: 0.75rem !important;
-        padding-right: 0.75rem !important;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        padding: 0.1rem 0;
     }
 
     .page:has(.sidebar-collapse-toggle:checked) .nav-item .nav-link {
         justify-content: center;
+        align-items: center;
+        width: 2.85rem;
+        min-width: 2.85rem;
+        height: 2.85rem;
         padding: 0;
+        gap: 0;
     }
 
-    .page:has(.sidebar-collapse-toggle:checked) .bi {
-        margin-right: 0;
+    .page:has(.sidebar-collapse-toggle:checked) .nav-icon {
+        margin: 0;
+        flex: 0 0 1.35rem;
     }
 }
 

@@ -1,6 +1,7 @@
 @page "/sessions"
 @rendermode InteractiveServer
 @attribute [Authorize]
+@implements IDisposable
 @inject IClubManagementService ClubManagementService
 
 <PageTitle>Игровые сессии</PageTitle>
@@ -28,60 +29,11 @@
 }
 else
 {
-    <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card h-100 border-primary">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Активные</p>
-                    <h2 class="h3 mb-0">@FilteredSessions.Count(session => ModelLabels.GetSessionDisplayKey(session) == "Active")</h2>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100 border-warning">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Просроченные</p>
-                    <h2 class="h3 mb-0">@FilteredSessions.Count(session => ModelLabels.GetSessionDisplayKey(session) == "Overdue")</h2>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Завершенные</p>
-                    <h2 class="h3 mb-0">@FilteredSessions.Count(session => session.Status == GameSessionStatus.Completed)</h2>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Выручка</p>
-                    <h2 class="h3 mb-0">@FormatMoney(FilteredSessions.Where(session => session.Status == GameSessionStatus.Completed).Sum(session => session.TotalPrice))</h2>
-                    <p class="small text-muted mb-0">Только завершённые в выборке</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Сессий</p>
-                    <h2 class="h3 mb-0">@FilteredSessions.Count()</h2>
-                    <p class="small text-muted mb-0">Всего в истории: @sessions.Count</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="card mb-4">
-        <div class="card-body">
-            <div class="row g-3">
+        <div class="card-body py-3">
+            <div class="row g-2 align-items-end">
                 <div class="col-lg-4">
-                    <label class="form-label" for="sessionSearch">Поиск</label>
+                    <label class="form-label mb-1" for="sessionSearch">Поиск</label>
                     <input class="form-control"
                            id="sessionSearch"
                            placeholder="Клиент, компьютер, зона или тариф"
@@ -90,7 +42,7 @@ else
                 </div>
 
                 <div class="col-md-4 col-lg-2">
-                    <label class="form-label" for="sessionStatus">Статус</label>
+                    <label class="form-label mb-1" for="sessionStatus">Статус</label>
                     <select class="form-select" id="sessionStatus" @bind="statusFilter">
                         <option value="">Все</option>
                         <option value="Active">Активные</option>
@@ -100,7 +52,7 @@ else
                 </div>
 
                 <div class="col-md-4 col-lg-2">
-                    <label class="form-label" for="sessionPeriod">Период</label>
+                    <label class="form-label mb-1" for="sessionPeriod">Период</label>
                     <select class="form-select" id="sessionPeriod" @bind="periodFilter">
                         <option value="">Все даты</option>
                         <option value="Today">Сегодня</option>
@@ -109,22 +61,29 @@ else
                     </select>
                 </div>
 
-                <div class="col-md-4 col-lg-2 d-flex align-items-end">
-                    <button class="btn btn-outline-secondary w-100" type="button" @onclick="ResetFilters">Сбросить</button>
+                <div class="col-md-4 col-lg-2 d-grid">
+                    <button class="btn btn-outline-secondary" type="button" @onclick="ResetFilters">Сбросить</button>
                 </div>
 
                 @if (periodFilter == "Custom")
                 {
-                    <div class="col-md-4 col-lg-3">
-                        <label class="form-label" for="sessionDateFrom">С</label>
+                    <div class="col-md-4 col-lg-2">
+                        <label class="form-label mb-1" for="sessionDateFrom">С</label>
                         <input class="form-control" id="sessionDateFrom" type="date" value="@dateFromText" @onchange="SetDateFrom" />
                     </div>
 
-                    <div class="col-md-4 col-lg-3">
-                        <label class="form-label" for="sessionDateTo">По</label>
+                    <div class="col-md-4 col-lg-2">
+                        <label class="form-label mb-1" for="sessionDateTo">По</label>
                         <input class="form-control" id="sessionDateTo" type="date" value="@dateToText" @onchange="SetDateTo" />
                     </div>
                 }
+            </div>
+
+            <div class="text-muted small mt-2">
+                Найдено: @FilteredSessions.Count() из @sessions.Count
+                · Активных: @FilteredSessions.Count(session => ModelLabels.GetSessionDisplayKey(session) == "Active")
+                · Просроченных: @FilteredSessions.Count(session => ModelLabels.GetSessionDisplayKey(session) == "Overdue")
+                · Выручка (завершённые): @FormatMoney(FilteredSessions.Where(session => session.Status == GameSessionStatus.Completed).Sum(session => session.TotalPrice))
             </div>
         </div>
     </div>
@@ -157,16 +116,16 @@ else
                                 <tr>
                                     <td>
                                         <strong>#@session.Id</strong>
-                                        <div class="text-muted small">@session.StartedAt.ToString("dd.MM.yyyy HH:mm")</div>
+                                        <div class="text-muted small">@ClubDateTime.Format(session.StartedAt)</div>
                                     </td>
                                     <td>@GetClientName(session.Client)</td>
                                     <td>
-                                        <strong>@(session.Computer?.Name ?? "-")</strong>
+                                        <strong>@ComputerDisplay.GetTitleOrDefault(session.Computer)</strong>
                                         <div class="text-muted small">@(session.Computer?.Zone?.Name ?? "-")</div>
                                     </td>
                                     <td>@(session.Tariff?.Name ?? "-")</td>
                                     <td>
-                                        <div>План: @session.PlannedEndAt.ToString("HH:mm")</div>
+                                        <div>План: @ClubDateTime.FormatTime(session.PlannedEndAt)</div>
                                         <div class="text-muted small">@GetSessionTimeText(session)</div>
                                     </td>
                                     <td><span class="badge @ModelLabels.GetSessionStatusBadgeClass(ModelLabels.GetSessionDisplayKey(session))">@ModelLabels.GetSessionStatusText(session)</span></td>
@@ -217,7 +176,7 @@ else
                         <dd class="col-sm-8">@FormatMoney(selectedSession.TotalPrice)</dd>
 
                         <dt class="col-sm-4">Факт</dt>
-                        <dd class="col-sm-8">@DateTime.Now.ToString("dd.MM.yyyy HH:mm")</dd>
+                        <dd class="col-sm-8">@ClubDateTime.Format(ClubDateTime.UtcNow)</dd>
                     </dl>
                 </div>
 
@@ -241,6 +200,7 @@ else
     private string? notification;
     private bool showCompleteDialog;
     private GameSession? selectedSession;
+    private System.Threading.Timer? refreshTimer;
 
     private IEnumerable<GameSession> FilteredSessions => sessions?
         .Where(MatchesFilters)
@@ -254,6 +214,26 @@ else
     protected override async Task OnInitializedAsync()
     {
         await LoadSessionsAsync();
+        refreshTimer = new System.Threading.Timer(_ => _ = RefreshSessionsAsync(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    public void Dispose()
+    {
+        refreshTimer?.Dispose();
+    }
+
+    private async Task RefreshSessionsAsync()
+    {
+        try
+        {
+            await ClubManagementService.CompleteExpiredSessionsAsync();
+            await LoadSessionsAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // Фоновое обновление не должно ломать страницу.
+        }
     }
 
     private async Task LoadSessionsAsync()
@@ -333,10 +313,10 @@ else
 
     private bool MatchesPeriod(GameSession session)
     {
-        var date = session.StartedAt.Date;
+        var date = ClubDateTime.ClubDate(session.StartedAt);
         return periodFilter switch
         {
-            "Today" => date == DateTime.Today,
+            "Today" => date == ClubDateTime.Today,
             "Shift" => CurrentShiftId is not null && session.CashierShiftId == CurrentShiftId,
             "Custom" => MatchesCustomPeriod(date),
             _ => true
@@ -358,21 +338,26 @@ else
         return true;
     }
 
-    private static string GetClientName(Client? client)
-    {
-        return client is null ? "-" : $"{client.FirstName} {client.LastName}";
-    }
+    private static string GetClientName(Client? client) => ModelLabels.GetClientDisplayName(client);
 
     private static string GetSessionTimeText(GameSession session)
     {
         if (session.EndedAt is not null)
         {
-            return $"Факт: {session.EndedAt:dd.MM.yyyy HH:mm}";
+            return $"Факт: {ClubDateTime.Format(session.EndedAt.Value)}";
         }
 
-        var remaining = session.PlannedEndAt - DateTime.Now;
+        if (GameSessionTiming.IsInGracePeriod(session))
+        {
+            var graceLeft = GameSessionTiming.GetGraceTimeLeft(session);
+            return graceLeft is null
+                ? "Авто-завершение"
+                : $"На продление: {FormatDuration(graceLeft.Value)}";
+        }
+
+        var remaining = session.PlannedEndAt - DateTime.UtcNow;
         return remaining <= TimeSpan.Zero
-            ? "Время истекло"
+            ? "Авто-завершение"
             : $"Осталось {FormatDuration(remaining)}";
     }
 
@@ -397,8 +382,8 @@ else
         {
             builder.AppendLine(string.Join(';',
                 EscapeCsv(session.Id.ToString()),
-                EscapeCsv(session.StartedAt.ToString("dd.MM.yyyy HH:mm")),
-                EscapeCsv(session.PlannedEndAt.ToString("dd.MM.yyyy HH:mm")),
+                EscapeCsv(ClubDateTime.Format(session.StartedAt)),
+                EscapeCsv(ClubDateTime.Format(session.PlannedEndAt)),
                 EscapeCsv(session.EndedAt?.ToString("dd.MM.yyyy HH:mm") ?? "-"),
                 EscapeCsv(ModelLabels.GetSessionStatusText(session)),
                 EscapeCsv(GetClientName(session.Client)),

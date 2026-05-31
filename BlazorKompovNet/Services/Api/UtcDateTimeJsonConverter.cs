@@ -1,11 +1,8 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace BlazorKompovNet.Services.Api;
 
-/// <summary>
-/// PostgreSQL timestamptz принимает только UTC; все даты в теле запроса приводятся к UTC.
-/// </summary>
 public sealed class UtcDateTimeJsonConverter : JsonConverter<DateTime>
 {
     public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

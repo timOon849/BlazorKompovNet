@@ -26,7 +26,11 @@ else
     <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
         <div>
             <h1>Игровая сессия #@session.Id</h1>
-            <p class="text-muted mb-0">@GetClientName(session.Client) · @(session.Computer?.Name ?? "Компьютер")</p>
+            <p class="text-muted mb-0">
+                @GetClientName(session.Client) · @(session.Computer?.Name ?? "Компьютер")
+                · <span class="badge @ModelLabels.GetSessionStatusBadgeClass(ModelLabels.GetSessionDisplayKey(session))">@ModelLabels.GetSessionStatusText(session)</span>
+                · @FormatMoney(session.TotalPrice)
+            </p>
         </div>
 
         <div class="d-flex gap-2">
@@ -40,36 +44,6 @@ else
         </div>
     </div>
 
-    <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <div class="card h-100 border-primary">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Стоимость</p>
-                    <h2 class="h3 mb-0">@FormatMoney(session.TotalPrice)</h2>
-                    <p class="small text-muted mb-0">Старт: @FormatMoney(session.InitialPrice)</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Статус</p>
-                    <span class="badge @ModelLabels.GetSessionStatusBadgeClass(ModelLabels.GetSessionDisplayKey(session))">@ModelLabels.GetSessionStatusText(session)</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Время</p>
-                    <h2 class="h5 mb-0">@GetSessionTimeText(session)</h2>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="card h-100">
@@ -77,14 +51,25 @@ else
                     <h2 class="h5 mb-3">Сессия</h2>
 
                     <dl class="row mb-0">
+                        <dt class="col-sm-5">Статус</dt>
+                        <dd class="col-sm-7">
+                            <span class="badge @ModelLabels.GetSessionStatusBadgeClass(ModelLabels.GetSessionDisplayKey(session))">@ModelLabels.GetSessionStatusText(session)</span>
+                        </dd>
+
+                        <dt class="col-sm-5">Стоимость</dt>
+                        <dd class="col-sm-7">@FormatMoney(session.TotalPrice) (старт: @FormatMoney(session.InitialPrice))</dd>
+
+                        <dt class="col-sm-5">Время</dt>
+                        <dd class="col-sm-7">@GetSessionTimeText(session)</dd>
+
                         <dt class="col-sm-5">Начало</dt>
-                        <dd class="col-sm-7">@session.StartedAt.ToString("dd.MM.yyyy HH:mm")</dd>
+                        <dd class="col-sm-7">@ClubDateTime.Format(session.StartedAt)</dd>
 
                         <dt class="col-sm-5">Плановое окончание</dt>
-                        <dd class="col-sm-7">@session.PlannedEndAt.ToString("dd.MM.yyyy HH:mm")</dd>
+                        <dd class="col-sm-7">@ClubDateTime.Format(session.PlannedEndAt)</dd>
 
                         <dt class="col-sm-5">Фактическое окончание</dt>
-                        <dd class="col-sm-7">@(session.EndedAt?.ToString("dd.MM.yyyy HH:mm") ?? "-")</dd>
+                        <dd class="col-sm-7">@(session.EndedAt is null ? "-" : ClubDateTime.Format(session.EndedAt.Value))</dd>
 
                         <dt class="col-sm-5">Тариф</dt>
                         <dd class="col-sm-7">@(session.Tariff?.Name ?? "-")</dd>
@@ -149,7 +134,7 @@ else
                             @foreach (var extension in session.Extensions.OrderByDescending(extension => extension.CreatedAt))
                             {
                                 <tr>
-                                    <td>@extension.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                    <td>@ClubDateTime.Format(extension.CreatedAt)</td>
                                     <td>@(extension.Tariff?.Name ?? "—")</td>
                                     <td>@extension.AddedMinutes</td>
                                     <td class="text-end">@(extension.Amount > 0 ? FormatMoney(extension.Amount) : "—")</td>
@@ -184,7 +169,7 @@ else
                             @foreach (var transaction in session.Transactions.OrderByDescending(transaction => transaction.CreatedAt))
                             {
                                 <tr>
-                                    <td>@transaction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                    <td>@ClubDateTime.Format(transaction.CreatedAt)</td>
                                     <td>@ModelLabels.GetTransactionTypeText(transaction.Type)</td>
                                     <td>@(transaction.PaymentType?.Name ?? "-")</td>
                                     <td class="text-end">@FormatMoney(transaction.Amount)</td>
@@ -223,7 +208,7 @@ else
                         <dd class="col-sm-8">@FormatMoney(session.TotalPrice)</dd>
 
                         <dt class="col-sm-4">Факт</dt>
-                        <dd class="col-sm-8">@DateTime.Now.ToString("dd.MM.yyyy HH:mm")</dd>
+                        <dd class="col-sm-8">@ClubDateTime.Format(ClubDateTime.UtcNow)</dd>
                     </dl>
                 </div>
 
@@ -277,10 +262,7 @@ else
         await LoadSessionAsync();
     }
 
-    private static string GetClientName(Client? client)
-    {
-        return client is null ? "-" : $"{client.FirstName} {client.LastName}";
-    }
+    private static string GetClientName(Client? client) => ModelLabels.GetClientDisplayName(client);
 
     private static string GetClientContact(Client? client)
     {
@@ -304,12 +286,20 @@ else
     {
         if (session.EndedAt is not null)
         {
-            return $"Завершена {session.EndedAt:dd.MM.yyyy HH:mm}";
+            return $"Завершена {ClubDateTime.Format(session.EndedAt.Value)}";
         }
 
-        var remaining = session.PlannedEndAt - DateTime.Now;
+        if (GameSessionTiming.IsInGracePeriod(session))
+        {
+            var graceLeft = GameSessionTiming.GetGraceTimeLeft(session);
+            return graceLeft is null
+                ? "Авто-завершение"
+                : $"На продление: {FormatDuration(graceLeft.Value)}";
+        }
+
+        var remaining = session.PlannedEndAt - DateTime.UtcNow;
         return remaining <= TimeSpan.Zero
-            ? "Время истекло"
+            ? "Авто-завершение"
             : $"Осталось {FormatDuration(remaining)}";
     }
 

@@ -21,10 +21,10 @@
 }
 
 <div class="row g-3 mb-4">
-    <div class="col-lg-5">
+    <div class="col-lg-4">
         <div class="card h-100">
             <div class="card-body">
-                <h2 class="h5">Текущая смена</h2>
+                <h2 class="h5 mb-3">Текущая смена</h2>
 
                 @if (currentShift is null)
                 {
@@ -32,9 +32,13 @@
                         Открытой смены нет. Запуск сессий и пополнение баланса заблокированы.
                     </div>
 
-                    <label class="form-label" for="shiftOpeningCash">Сумма в кассе на старте</label>
-                    <input class="form-control mb-3" id="shiftOpeningCash" type="number" min="0" step="100" @bind="openingCashAmount" />
-                    <button class="btn btn-primary" type="button" @onclick="OpenShiftAsync">Открыть смену</button>
+                    <div class="mb-3">
+                        <label class="form-label" for="shiftOpeningCash">Сумма в кассе на старте</label>
+                        <input class="form-control" id="shiftOpeningCash" type="number" min="0" step="100" @bind="openingCashAmount" />
+                        <div class="form-text">Укажите фактическую сумму наличных в кассе перед началом работы.</div>
+                    </div>
+
+                    <button class="btn btn-primary w-100" type="button" @onclick="OpenShiftAsync">Открыть смену</button>
                 }
                 else
                 {
@@ -46,57 +50,39 @@
                         <dd class="col-sm-7">@GetCashierName(currentShift)</dd>
 
                         <dt class="col-sm-5">Открыта</dt>
-                        <dd class="col-sm-7">@currentShift.OpenedAt.ToString("dd.MM.yyyy HH:mm")</dd>
+                        <dd class="col-sm-7">@ClubDateTime.Format(currentShift.OpenedAt)</dd>
 
                         <dt class="col-sm-5">Длительность</dt>
-                        <dd class="col-sm-7">@FormatDuration(DateTime.Now - currentShift.OpenedAt)</dd>
+                        <dd class="col-sm-7">@FormatDuration(DateTime.UtcNow - currentShift.OpenedAt)</dd>
 
                         <dt class="col-sm-5">Старт кассы</dt>
                         <dd class="col-sm-7">@FormatMoney(currentShift.OpeningCashAmount)</dd>
 
-                        <dt class="col-sm-5">Сейчас в кассе</dt>
-                        <dd class="col-sm-7">@FormatMoney(currentShift.CurrentCashAmount)</dd>
+                        <dt class="col-sm-5">Выручка смены</dt>
+                        <dd class="col-sm-7">@FormatMoney(GetShiftRevenue(currentShift.Id))</dd>
+
+                        <dt class="col-sm-5">Расчётная касса</dt>
+                        <dd class="col-sm-7">@FormatMoney(GetExpectedCash(currentShift))</dd>
                     </dl>
 
                     <div class="mt-3 pt-3 border-top">
-                        <label class="form-label" for="shiftClosingCash">Фактическая сумма в кассе</label>
-                        <input class="form-control mb-2" id="shiftClosingCash" type="number" min="0" step="100" @bind="closingCashAmount" />
-                        <button class="btn btn-outline-danger" type="button" @onclick="CloseShiftAsync">Закрыть смену</button>
+                        @if (activeSessionsCount > 0)
+                        {
+                            <div class="alert alert-warning py-2 small mb-3">
+                                В клубе @activeSessionsCount активн@(activeSessionsCount == 1 ? "ая сессия" : activeSessionsCount < 5 ? "ые сессии" : "ых сессий").
+                                Смену можно закрыть — сессии продолжатся, но пополнения и новые операции станут недоступны до открытия следующей смены.
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label" for="shiftClosingCash">Фактическая сумма при закрытии</label>
+                            <input class="form-control" id="shiftClosingCash" type="number" min="0" step="100" @bind="closingCashAmount" />
+                            <div class="form-text">Пересчитайте наличные в кассе перед закрытием смены.</div>
+                        </div>
+
+                        <button class="btn btn-outline-danger w-100" type="button" @onclick="CloseShiftAsync">Закрыть смену</button>
                     </div>
                 }
-            </div>
-        </div>
-    </div>
-
-    <div class="col-lg-7">
-        <div class="row g-3">
-            <div class="col-md-4">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <p class="text-muted mb-1">Всего смен</p>
-                        <h2 class="h3 mb-0">@shifts.Count</h2>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-4">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <p class="text-muted mb-1">Закрыто</p>
-                        <h2 class="h3 mb-0">@shifts.Count(shift => !shift.IsOpen)</h2>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-4">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <p class="text-muted mb-1">Статус</p>
-                        <span class="badge @(currentShift is null ? "text-bg-secondary" : "text-bg-success")">
-                            @(currentShift is null ? "Нет смены" : "Открыта")
-                        </span>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -104,7 +90,7 @@
 
 <div class="card">
     <div class="card-body">
-        <h2 class="h5">История смен</h2>
+        <h2 class="h5 mb-3">История смен (@shifts.Count)</h2>
 
         @if (!shifts.Any())
         {
@@ -122,6 +108,7 @@
                             <th>Закрыта</th>
                             <th>Статус</th>
                             <th class="text-end">Старт кассы</th>
+                            <th class="text-end">Выручка</th>
                             <th class="text-end">Итог кассы</th>
                         </tr>
                     </thead>
@@ -139,7 +126,8 @@
                                     </span>
                                 </td>
                                 <td class="text-end">@FormatMoney(shift.OpeningCashAmount)</td>
-                                <td class="text-end">@FormatMoney(shift.CurrentCashAmount)</td>
+                                <td class="text-end">@FormatMoney(GetShiftRevenue(shift.Id))</td>
+                                <td class="text-end">@FormatMoney(shift.IsOpen ? GetExpectedCash(shift) : shift.CurrentCashAmount)</td>
                             </tr>
                         }
                     </tbody>
@@ -151,10 +139,13 @@
 
 @code {
     private IReadOnlyList<CashierShift> shifts = [];
+    private IReadOnlyList<Transaction> transactions = [];
     private CashierShift? currentShift;
     private string? notification;
     private decimal openingCashAmount;
     private decimal closingCashAmount;
+
+    private int activeSessionsCount;
 
     protected override async Task OnInitializedAsync()
     {
@@ -164,9 +155,17 @@
     private async Task LoadDataAsync()
     {
         shifts = await ClubManagementService.GetCashierShiftsAsync();
+        transactions = await ClubManagementService.GetTransactionsAsync();
         currentShift = await ClubManagementService.GetCurrentShiftAsync();
-        closingCashAmount = currentShift?.CurrentCashAmount ?? 0;
+        activeSessionsCount = (await ClubManagementService.GetActiveSessionsAsync()).Count;
+        closingCashAmount = currentShift is null ? 0 : GetExpectedCash(currentShift);
     }
+
+    private decimal GetShiftRevenue(int shiftId) =>
+        ShiftAccounting.GetShiftRevenue(transactions, shiftId);
+
+    private decimal GetExpectedCash(CashierShift shift) =>
+        ShiftAccounting.GetExpectedCashAmount(shift, transactions);
 
     private async Task OpenShiftAsync()
     {

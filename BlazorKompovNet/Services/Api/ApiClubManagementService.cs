@@ -5,7 +5,7 @@ namespace BlazorKompovNet.Services;
 
 public sealed class ApiClubManagementService(KompovApiClient api, ICashierRepository cashierRepository) : IClubManagementService
 {
-    private const decimal MaxHourlyDuration = 12m;
+    private const decimal MinHourlyDuration = 0.5m;
 
     private int? clubId;
     private Club? club;
@@ -24,8 +24,8 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             {
                 var mapped = ApiMapper.ToZone(zone, club);
                 mapped.Computers = apiComputers
-                    .Where(computer => computer.ZoneId == zone.Id)
-                    .Select(computer => ApiMapper.ToComputer(computer, mapped))
+                    .Where(computer => computer.ZoneId == zone.Id && computer.ClubId == clubId)
+                    .Select(computer => ApiMapper.ToComputer(computer, mapped, computerStatuses))
                     .ToList();
                 return mapped;
             })
@@ -34,7 +34,7 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
 
     public async Task<IReadOnlyList<Tariff>> GetTariffsAsync()
     {
-        var tariffs = await api.GetListAsync<ApiTariff>(api.Admin("tariffs"));
+        var tariffs = await GetApiTariffsWithZonesAsync();
         return tariffs.Where(tariff => tariff.IsActive).Select(ApiMapper.ToTariff).ToList();
     }
 
@@ -149,23 +149,22 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             .Select(transaction => ApiMapper.ToTransaction(transaction, club))
             .ToList();
 
-        foreach (var transaction in mapped)
-        {
-            var paymentType = paymentTypes.FirstOrDefault(type => type.Id == transaction.PaymentTypeId);
-            if (paymentType is not null)
-            {
-                transaction.PaymentType = ApiMapper.ToPaymentType(paymentType);
-            }
-        }
-
+        await EnrichTransactionsAsync(mapped);
         return mapped;
     }
 
     public async Task<Transaction?> GetTransactionAsync(int transactionId)
     {
         var transaction = await api.GetAsync<ApiTransaction>(api.Admin($"transactions/{transactionId}"));
+        if (transaction is null)
+        {
+            return null;
+        }
+
         await EnsureContextAsync();
-        return transaction is null ? null : ApiMapper.ToTransaction(transaction, club);
+        var mapped = ApiMapper.ToTransaction(transaction, club);
+        await EnrichTransactionsAsync([mapped]);
+        return mapped;
     }
 
     public async Task<IReadOnlyList<CashierShift>> GetCashierShiftsAsync()
@@ -191,7 +190,13 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
         return paymentTypes.Where(type => type.IsActive).Select(ApiMapper.ToPaymentType).ToList();
     }
 
-    public async Task<ClubOperationResult> RegisterClientAsync(string firstName, string lastName, string? phoneNumber, string? email)
+    public async Task<ClubOperationResult> RegisterClientAsync(
+        string firstName,
+        string lastName,
+        string? phoneNumber,
+        string? email,
+        string? login = null,
+        string? password = null)
     {
         try
         {
@@ -200,14 +205,33 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Укажите имя и фамилию гостя.");
             }
 
+            var existing = await GetClientsAsync();
             var normalizedPhone = string.IsNullOrWhiteSpace(phoneNumber) ? null : phoneNumber.Trim();
-            if (normalizedPhone is not null)
+            var normalizedEmail = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
+            var normalizedLogin = string.IsNullOrWhiteSpace(login) ? null : login.Trim();
+            var normalizedPassword = string.IsNullOrWhiteSpace(password) ? null : password;
+
+            if (normalizedPhone is not null &&
+                existing.Any(client => string.Equals(client.PhoneNumber, normalizedPhone, StringComparison.OrdinalIgnoreCase)))
             {
-                var existing = await GetClientsAsync();
-                if (existing.Any(client => string.Equals(client.PhoneNumber, normalizedPhone, StringComparison.OrdinalIgnoreCase)))
-                {
-                    return ClubOperationResult.Failure("Клиент с таким телефоном уже зарегистрирован.");
-                }
+                return ClubOperationResult.Failure("Клиент с таким телефоном уже зарегистрирован.");
+            }
+
+            if (normalizedEmail is not null &&
+                existing.Any(client => string.Equals(client.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ClubOperationResult.Failure("Клиент с таким email уже зарегистрирован.");
+            }
+
+            if (normalizedLogin is not null &&
+                existing.Any(client => string.Equals(client.Login, normalizedLogin, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ClubOperationResult.Failure("Клиент с таким логином уже зарегистрирован.");
+            }
+
+            if (normalizedLogin is not null && string.IsNullOrWhiteSpace(normalizedPassword))
+            {
+                return ClubOperationResult.Failure("Укажите пароль для входа в мобильное приложение.");
             }
 
             var model = new ApiClient
@@ -215,8 +239,11 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 FirstName = firstName.Trim(),
                 LastName = lastName.Trim(),
                 PhoneNumber = normalizedPhone,
-                Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim(),
+                Email = normalizedEmail,
+                Login = normalizedLogin,
+                Password = normalizedPassword,
                 RegisteredAt = DateTime.UtcNow,
+                Balance = 0,
                 IsActive = true
             };
 
@@ -288,16 +315,16 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Эта смена уже закрыта.");
             }
 
-            var activeSessions = await GetActiveSessionsAsync();
-            if (activeSessions.Any(session => session.CashierShiftId == shiftId))
-            {
-                return ClubOperationResult.Failure("Завершите все активные сессии текущей смены перед закрытием.");
-            }
-
             shift.CurrentCashAmount = closingCashAmount;
             shift.ClosedAt = DateTime.UtcNow;
             await api.PutAsync(api.Admin($"cashier-shifts/{shiftId}"), shift);
-            return ClubOperationResult.Success($"Смена #{shiftId} закрыта.");
+
+            var activeCount = (await GetActiveSessionsAsync()).Count;
+            var message = activeCount > 0
+                ? $"Смена #{shiftId} закрыта. Активных сессий в клубе: {activeCount}. Новые операции (пополнения, старт сессий и т.д.) недоступны до открытия смены."
+                : $"Смена #{shiftId} закрыта.";
+
+            return ClubOperationResult.Success(message);
         }
         catch (Exception ex)
         {
@@ -393,7 +420,10 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Окончание брони должно быть позже начала.");
             }
 
-            if (endsAt <= DateTime.Now)
+            var startsUtc = ClubTimeZone.ToUtc(startsAt);
+            var endsUtc = ClubTimeZone.ToUtc(endsAt);
+
+            if (endsUtc <= DateTime.UtcNow)
             {
                 return ClubOperationResult.Failure("Нельзя создать бронь в прошлом.");
             }
@@ -405,20 +435,20 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             }
 
             var bookings = await GetBookingsAsync();
-            if (HasBookingConflict(bookings, computerId, startsAt, endsAt))
+            if (HasBookingConflict(bookings, computerId, startsUtc, endsUtc))
             {
                 return ClubOperationResult.Failure("На выбранное время компьютер уже забронирован.");
             }
 
-            var status = startsAt <= DateTime.Now ? BookingStatus.Active : BookingStatus.Created;
+            var status = startsUtc <= DateTime.UtcNow ? BookingStatus.Active : BookingStatus.Created;
             var booking = new ApiBooking
             {
                 ClubId = clubId!.Value,
                 ClientId = clientId,
                 ComputerId = computerId,
                 ZoneId = computer.ZoneId,
-                StartsAt = startsAt,
-                EndsAt = endsAt,
+                StartsAt = startsUtc,
+                EndsAt = endsUtc,
                 Status = Enum.Parse<ApiBookingStatus>(status),
                 CreatedByCashierId = currentShift.CashierId
             };
@@ -444,11 +474,17 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
     public Task<ClubOperationResult> MarkBookingNoShowAsync(int bookingId) =>
         ChangeBookingStatusAsync(bookingId, BookingStatus.NoShow, "Бронь отмечена как неявка.");
 
-    public async Task<ClubOperationResult> StartSessionAsync(int computerId, int clientId, int tariffId, decimal hours)
+    public async Task<ClubOperationResult> StartSessionAsync(
+        int computerId,
+        int tariffId,
+        decimal hours,
+        int? clientId,
+        int? paymentTypeId)
     {
         try
         {
             await EnsureContextAsync();
+            await EnsureBalancePaymentTypeAsync();
             var currentShift = await GetCurrentShiftAsync();
             if (currentShift is null)
             {
@@ -457,7 +493,6 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
 
             var zones = await GetZonesAsync();
             var computer = zones.SelectMany(zone => zone.Computers).FirstOrDefault(item => item.Id == computerId);
-            var client = await GetClientAsync(clientId);
             var tariffs = await GetTariffsAsync();
             var tariff = tariffs.FirstOrDefault(item => item.Id == tariffId && item.IsActive);
 
@@ -466,23 +501,34 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Компьютер не найден.");
             }
 
-            if (client is null)
-            {
-                return ClubOperationResult.Failure("Клиент не найден.");
-            }
-
             if (tariff is null)
             {
                 return ClubOperationResult.Failure("Тариф не найден или отключен.");
             }
 
-            var validation = ValidateSessionStart(computer, clientId, await GetActiveSessionsAsync(), await GetBookingsAsync());
+            var isGuestSession = clientId is null;
+            Client? client = null;
+            if (clientId is int accountClientId)
+            {
+                client = await GetClientAsync(accountClientId);
+                if (client is null)
+                {
+                    return ClubOperationResult.Failure("Клиент не найден.");
+                }
+            }
+
+            var validation = ValidateSessionStart(
+                computer,
+                clientId,
+                await GetActiveSessionsAsync(),
+                await GetBookingsAsync());
             if (validation is not null)
             {
                 return validation;
             }
 
-            if ((await GetActiveSessionsAsync()).Any(session => session.ClientId == clientId))
+            if (clientId is int activeClientId
+                && (await GetActiveSessionsAsync()).Any(session => session.ClientId == activeClientId))
             {
                 return ClubOperationResult.Failure("Этот посетитель уже находится за другим компьютером.");
             }
@@ -493,7 +539,7 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Для выбранной зоны не указана цена тарифа.");
             }
 
-            var billedHours = tariff.IsHourly ? Math.Clamp(hours, 0.5m, MaxHourlyDuration) : 0m;
+            var billedHours = tariff.IsHourly ? Math.Max(hours, MinHourlyDuration) : 0m;
             var duration = tariff.IsHourly
                 ? TimeSpan.FromHours((double)billedHours)
                 : tariff.Duration;
@@ -501,9 +547,39 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 ? tariffZone.Price * billedHours
                 : tariffZone.Price;
 
-            if (client.Balance < totalPrice)
+            int transactionPaymentTypeId;
+            if (isGuestSession)
             {
-                return ClubOperationResult.Failure("Недостаточно средств на балансе посетителя.");
+                if (paymentTypeId is null)
+                {
+                    return ClubOperationResult.Failure("Выберите способ оплаты (наличные или карта).");
+                }
+
+                var guestPaymentType = paymentTypes.FirstOrDefault(type => type.Id == paymentTypeId.Value && type.IsActive);
+                if (guestPaymentType is null
+                    || guestPaymentType.IsBonus
+                    || guestPaymentType.Code is PaymentTypeCodes.Balance or PaymentTypeCodes.Bonus)
+                {
+                    return ClubOperationResult.Failure("Для гостя без аккаунта доступны только наличные или карта.");
+                }
+
+                transactionPaymentTypeId = guestPaymentType.Id;
+            }
+            else
+            {
+                if (client!.Balance < totalPrice)
+                {
+                    return ClubOperationResult.Failure("Недостаточно средств на балансе посетителя.");
+                }
+
+                var balancePaymentType = paymentTypes.FirstOrDefault(type => type.Code == PaymentTypeCodes.Balance);
+                if (balancePaymentType is null)
+                {
+                    return ClubOperationResult.Failure(
+                        "В системе не настроен способ оплаты «С баланса». Обновите API (миграция/сид).");
+                }
+
+                transactionPaymentTypeId = balancePaymentType.Id;
             }
 
             var session = new ApiGameSession
@@ -522,8 +598,12 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             };
 
             var created = await api.PostAsync<ApiGameSession>(api.Crm("sessions"), session);
-            client.Balance -= totalPrice;
-            await api.PutAsync(api.Mobile($"clients/{clientId}"), ApiMapper.ToApiClient(client));
+
+            if (clientId is int balanceClientId)
+            {
+                client!.Balance -= totalPrice;
+                await api.PutAsync(api.Mobile($"clients/{balanceClientId}"), ApiMapper.ToApiClient(client));
+            }
 
             await api.PostAsync(api.Admin("transactions"), new ApiTransaction
             {
@@ -531,7 +611,7 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 CashierShiftId = currentShift.Id,
                 ClientId = clientId,
                 GameSessionId = created?.Id,
-                PaymentTypeId = paymentTypes.First(type => !type.IsBonus).Id,
+                PaymentTypeId = transactionPaymentTypeId,
                 Amount = totalPrice,
                 Type = ApiTransactionType.SessionStart,
                 Status = ApiPaymentStatus.Paid,
@@ -539,7 +619,10 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             });
 
             await SetComputerStatusAsync(computerId, ComputerStatusCodes.Busy);
-            await CompleteActiveBookingAsync(computerId, clientId);
+            if (clientId is int bookingClientId)
+            {
+                await CompleteActiveBookingAsync(computerId, bookingClientId);
+            }
 
             return ClubOperationResult.Success($"Сессия на {computer.Name} запущена.");
         }
@@ -572,7 +655,12 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Тариф не найден или отключен.");
             }
 
-            var client = await GetClientAsync(session.ClientId);
+            if (session.ClientId is not int sessionClientId)
+            {
+                return ClubOperationResult.Failure("Продление по тарифу доступно только для сессий с аккаунтом клиента.");
+            }
+
+            var client = await GetClientAsync(sessionClientId);
             if (client is null)
             {
                 return ClubOperationResult.Failure("Клиент сеанса не найден.");
@@ -586,7 +674,7 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Для зоны компьютера не указана цена тарифа.");
             }
 
-            var billedHours = tariff.IsHourly ? Math.Clamp(hours, 0.5m, MaxHourlyDuration) : 0m;
+            var billedHours = tariff.IsHourly ? Math.Max(hours, MinHourlyDuration) : 0m;
             var duration = tariff.IsHourly
                 ? TimeSpan.FromHours((double)billedHours)
                 : tariff.Duration;
@@ -607,13 +695,20 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             await api.PutAsync(api.Crm($"sessions/{sessionId}"), ApiMapper.ToApiSession(session));
 
             await EnsureContextAsync();
+            var balancePaymentType = paymentTypes.FirstOrDefault(type => type.Code == PaymentTypeCodes.Balance);
+            if (balancePaymentType is null)
+            {
+                return ClubOperationResult.Failure(
+                    "В системе не настроен способ оплаты «С баланса». Обновите API (миграция/сид).");
+            }
+
             await api.PostAsync(api.Admin("transactions"), new ApiTransaction
             {
                 ClubId = clubId!.Value,
                 CashierShiftId = currentShift.Id,
                 ClientId = client.Id,
                 GameSessionId = sessionId,
-                PaymentTypeId = paymentTypes.First(type => !type.IsBonus).Id,
+                PaymentTypeId = balancePaymentType.Id,
                 Amount = price,
                 Type = ApiTransactionType.SessionExtension,
                 Status = ApiPaymentStatus.Paid,
@@ -683,6 +778,23 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
         {
             return ClubOperationResult.Failure(ex.Message);
         }
+    }
+
+    public async Task<IReadOnlyList<int>> CompleteExpiredSessionsAsync()
+    {
+        var activeSessions = await GetActiveSessionsAsync();
+        var completedIds = new List<int>();
+
+        foreach (var session in activeSessions.Where(GameSessionTiming.ShouldAutoComplete))
+        {
+            var result = await CompleteSessionAsync(session.Id);
+            if (result.Succeeded)
+            {
+                completedIds.Add(session.Id);
+            }
+        }
+
+        return completedIds;
     }
 
     public async Task<ClubOperationResult> TurnOnComputerAsync(int computerId)
@@ -769,6 +881,77 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
         {
             return ClubOperationResult.Failure(ex.Message);
         }
+    }
+
+    private async Task<IReadOnlyList<ApiTariff>> GetApiTariffsWithZonesAsync()
+    {
+        var tariffs = await api.GetListAsync<ApiTariff>(api.Admin("tariffs"));
+        var tariffZones = await api.GetListAsync<ApiTariffZone>(api.Admin("tariff-zones"));
+        var zonesByTariffId = tariffZones
+            .GroupBy(zone => zone.TariffId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        foreach (var tariff in tariffs)
+        {
+            if (zonesByTariffId.TryGetValue(tariff.Id, out var zones))
+            {
+                tariff.TariffZones = zones;
+            }
+        }
+
+        return tariffs;
+    }
+
+    private async Task EnrichTransactionsAsync(IReadOnlyList<Transaction> transactions)
+    {
+        if (transactions.Count == 0)
+        {
+            return;
+        }
+
+        await EnsureContextAsync();
+
+        var clients = (await api.GetListAsync<ApiClient>(api.Mobile("clients")))
+            .ToDictionary(client => client.Id);
+        var shifts = (await api.GetListAsync<ApiCashierShift>(api.Admin("cashier-shifts")))
+            .ToDictionary(shift => shift.Id, shift => ApiMapper.ToShift(shift, club));
+        var cashiers = (await api.GetListAsync<ApiCashier>(api.Admin("cashiers")))
+            .ToDictionary(cashier => cashier.Id);
+
+        foreach (var transaction in transactions)
+        {
+            if (transaction.ClientId is int clientId && clients.TryGetValue(clientId, out var apiClient))
+            {
+                transaction.Client = ApiMapper.ToClient(apiClient);
+            }
+
+            if (transaction.CashierShiftId is int shiftId && shifts.TryGetValue(shiftId, out var shift))
+            {
+                if (shift.Cashier is null && cashiers.TryGetValue(shift.CashierId, out var apiCashier))
+                {
+                    shift.Cashier = ApiMapper.ToCashier(apiCashier);
+                }
+
+                transaction.CashierShift = shift;
+            }
+
+            var paymentType = paymentTypes.FirstOrDefault(type => type.Id == transaction.PaymentTypeId);
+            if (paymentType is not null)
+            {
+                transaction.PaymentType = ApiMapper.ToPaymentType(paymentType);
+            }
+        }
+    }
+
+    private async Task EnsureBalancePaymentTypeAsync()
+    {
+        if (paymentTypes.Any(type => type.Code == PaymentTypeCodes.Balance))
+        {
+            return;
+        }
+
+        clubId = null;
+        await EnsureContextAsync();
     }
 
     private async Task EnsureContextAsync()
@@ -885,20 +1068,20 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             .ToDictionary(computer => computer.Id);
         var zones = (await api.GetListAsync<ApiComputerZone>(api.Admin("zones")))
             .ToDictionary(zone => zone.Id, zone => ApiMapper.ToZone(zone, club));
-        var tariffs = (await api.GetListAsync<ApiTariff>(api.Admin("tariffs")))
+        var tariffs = (await GetApiTariffsWithZonesAsync())
             .ToDictionary(tariff => tariff.Id);
 
         foreach (var session in sessions)
         {
-            if (clients.TryGetValue(session.ClientId, out var apiClient))
+            if (session.ClientId is int clientId && clients.TryGetValue(clientId, out var apiClient))
             {
                 session.Client = ApiMapper.ToClient(apiClient);
             }
 
             if (computers.TryGetValue(session.ComputerId, out var apiComputer))
             {
-                zones.TryGetValue(apiComputer.ZoneId, out var zone);
-                session.Computer = ApiMapper.ToComputer(apiComputer, zone);
+                zones.TryGetValue(apiComputer.ZoneId, out var mappedZone);
+                session.Computer = ApiMapper.ToComputer(apiComputer, mappedZone, computerStatuses);
             }
 
             if (tariffs.TryGetValue(session.TariffId, out var apiTariff))
@@ -965,7 +1148,7 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             if (computers.TryGetValue(booking.ComputerId, out var apiComputer))
             {
                 zones.TryGetValue(apiComputer.ZoneId, out var zone);
-                booking.Computer = ApiMapper.ToComputer(apiComputer, zone);
+                booking.Computer = ApiMapper.ToComputer(apiComputer, zone, computerStatuses);
                 booking.Zone = zone;
             }
             else if (zones.TryGetValue(booking.ZoneId, out var bookingZone))
@@ -977,7 +1160,7 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
 
     private static ClubOperationResult? ValidateSessionStart(
         Computer computer,
-        int clientId,
+        int? clientId,
         IReadOnlyList<GameSession> activeSessions,
         IReadOnlyList<Booking> bookings)
     {
@@ -993,6 +1176,11 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
 
         if (computer.Status?.Code == ComputerStatusCodes.Reserved)
         {
+            if (clientId is null)
+            {
+                return ClubOperationResult.Failure("Компьютер зарезервирован. Для гостя без аккаунта выберите другой ПК.");
+            }
+
             var hasBooking = bookings.Any(booking =>
                 booking.ComputerId == computer.Id &&
                 booking.ClientId == clientId &&

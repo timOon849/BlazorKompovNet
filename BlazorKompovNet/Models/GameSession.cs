@@ -12,7 +12,7 @@ public sealed class GameSession
 
     public Computer? Computer { get; set; }
 
-    public int ClientId { get; set; }
+    public int? ClientId { get; set; }
 
     public Client? Client { get; set; }
 

@@ -31,76 +31,51 @@ else
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Баланс</p>
-                    <h2 class="h3 mb-0">@FormatMoney(client.Balance)</h2>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Сессии</p>
-                    <h2 class="h3 mb-0">@ClientSessions.Count()</h2>
-                    <p class="small text-muted mb-0">Активных: @ClientSessions.Count(ModelLabels.IsSessionActive)</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Брони</p>
-                    <h2 class="h3 mb-0">@ClientBookings.Count()</h2>
-                    <p class="small text-muted mb-0">Открытых: @ClientBookings.Count(IsOpenBooking)</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Оборот</p>
-                    <h2 class="h3 mb-0">@FormatMoney(ClientTransactions.Where(t => !ModelLabels.IsSessionCharge(t.Type)).Sum(t => t.Amount))</h2>
-                    <p class="small text-muted mb-0">Пополнения без списаний за сессии</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row g-3 mb-4">
         <div class="col-lg-5">
             <div class="card h-100">
                 <div class="card-body">
                     <h2 class="h5 mb-3">Данные клиента</h2>
 
                     <dl class="row mb-0">
+                        <dt class="col-sm-4">Баланс</dt>
+                        <dd class="col-sm-8"><strong>@FormatMoney(client.Balance)</strong></dd>
+
                         <dt class="col-sm-4">Телефон</dt>
                         <dd class="col-sm-8">@(client.PhoneNumber ?? "-")</dd>
-
-                        <dt class="col-sm-4">Логин</dt>
-                        <dd class="col-sm-8">@(client.Login ?? "-")</dd>
 
                         <dt class="col-sm-4">Email</dt>
                         <dd class="col-sm-8">@(client.Email ?? "-")</dd>
 
-                        <dt class="col-sm-4">Регистрация</dt>
-                        <dd class="col-sm-8">@client.RegisteredAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</dd>
+                        <dt class="col-sm-4">Логин</dt>
+                        <dd class="col-sm-8">@(client.Login ?? "-")</dd>
 
-                        <dt class="col-sm-4">Статус</dt>
+                        <dt class="col-sm-4">Регистрация</dt>
+                        <dd class="col-sm-8">@ClubDateTime.Format(client.RegisteredAt)</dd>
+
+                        <dt class="col-sm-4">Активность</dt>
                         <dd class="col-sm-8">
                             @if (ClientSessions.Any(ModelLabels.IsSessionActive))
                             {
                                 <span class="badge text-bg-primary">Сейчас играет</span>
+                            }
+                            else if (ClientBookings.Any(IsOpenBooking))
+                            {
+                                <span class="badge text-bg-warning">Есть бронь</span>
                             }
                             else
                             {
                                 <span class="badge text-bg-secondary">Не в клубе</span>
                             }
                         </dd>
+
+                        <dt class="col-sm-4">Сессии</dt>
+                        <dd class="col-sm-8">@ClientSessions.Count() всего · @ClientSessions.Count(ModelLabels.IsSessionActive) активных</dd>
+
+                        <dt class="col-sm-4">Брони</dt>
+                        <dd class="col-sm-8">@ClientBookings.Count() всего · @ClientBookings.Count(IsOpenBooking) открытых</dd>
+
+                        <dt class="col-sm-4">Пополнения</dt>
+                        <dd class="col-sm-8">@FormatMoney(ClientTransactions.Where(t => !ModelLabels.IsSessionCharge(t.Type)).Sum(t => t.Amount))</dd>
                     </dl>
                 </div>
             </div>
@@ -131,7 +106,7 @@ else
                                     @foreach (var transaction in ClientTransactions.Take(5))
                                     {
                                         <tr>
-                                            <td>@transaction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                            <td>@ClubDateTime.Format(transaction.CreatedAt)</td>
                                             <td>@ModelLabels.GetTransactionTypeText(transaction.Type)</td>
                                             <td>@(transaction.PaymentType?.Name ?? "-")</td>
                                             <td class="text-end">@ModelLabels.FormatTransactionAmount(transaction)</td>
@@ -175,7 +150,7 @@ else
                                     @foreach (var session in ClientSessions)
                                     {
                                         <tr>
-                                            <td>@session.StartedAt.ToString("dd.MM.yyyy HH:mm")</td>
+                                            <td>@ClubDateTime.Format(session.StartedAt)</td>
                                             <td>@(session.Computer?.Name ?? "-")</td>
                                             <td><span class="badge @ModelLabels.GetSessionStatusBadgeClass(ModelLabels.GetSessionDisplayKey(session))">@ModelLabels.GetSessionStatusText(session)</span></td>
                                             <td class="text-end">@FormatMoney(session.TotalPrice)</td>

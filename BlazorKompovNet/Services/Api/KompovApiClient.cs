@@ -1,4 +1,4 @@
-using System.Net.Http.Json;
+﻿using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -65,7 +65,7 @@ public sealed class KompovApiClient
             () => httpClient.PostAsJsonAsync(BuildUri(path), body, JsonOptions, cancellationToken),
             cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessOrThrowAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
     }
 
@@ -75,7 +75,7 @@ public sealed class KompovApiClient
             () => httpClient.PostAsJsonAsync(BuildUri(path), body, JsonOptions, cancellationToken),
             cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessOrThrowAsync(response, cancellationToken);
     }
 
     public async Task PutAsync(string path, object body, CancellationToken cancellationToken = default)
@@ -84,7 +84,7 @@ public sealed class KompovApiClient
             () => httpClient.PutAsJsonAsync(BuildUri(path), body, JsonOptions, cancellationToken),
             cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessOrThrowAsync(response, cancellationToken);
     }
 
     public async Task DeleteAsync(string path, CancellationToken cancellationToken = default)
@@ -134,7 +134,7 @@ public sealed class KompovApiClient
         new(
             $"Не удалось подключиться к API ({options.BaseUrl}). " +
             "Убедитесь, что KompovNetApi запущен. " +
-            "Если Blazor и API на одном ПК — используйте http://127.0.0.1:5232, не IP сети и не localhost.",
+            "Если Blazor и API на одном ПК — используйте http://10.80.104.157:5232, не IP сети и не localhost.",
             inner);
 
     private static string Combine(string prefix, string relativePath)
@@ -142,5 +142,52 @@ public sealed class KompovApiClient
         var left = prefix.Trim('/');
         var right = relativePath.Trim('/');
         return string.IsNullOrEmpty(right) ? left : $"{left}/{right}";
+    }
+
+    private static async Task EnsureSuccessOrThrowAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var details = await response.Content.ReadAsStringAsync(cancellationToken);
+        var message = TryExtractApiErrorMessage(details)
+            ?? $"Запрос завершился с кодом {(int)response.StatusCode} ({response.StatusCode}).";
+
+        if (details.Contains("FK_GameSessions_Clients_ClientId", StringComparison.Ordinal))
+        {
+            message =
+                "База данных API не обновлена: нужна миграция для гостевых сессий без аккаунта. " +
+                "Перезапустите KompovNetApi из актуальной версии репозитория.";
+        }
+
+        throw new InvalidOperationException(message);
+    }
+
+    private static string? TryExtractApiErrorMessage(string details)
+    {
+        if (string.IsNullOrWhiteSpace(details))
+        {
+            return null;
+        }
+
+        const string marker = "Exception:";
+        var index = details.LastIndexOf(marker, StringComparison.Ordinal);
+        if (index < 0)
+        {
+            return details.Length > 300 ? details[..300] : details;
+        }
+
+        var excerpt = details[(index + marker.Length)..].Trim();
+        var lineBreak = excerpt.IndexOf('\n');
+        if (lineBreak > 0)
+        {
+            excerpt = excerpt[..lineBreak].Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(excerpt) ? null : excerpt;
     }
 }

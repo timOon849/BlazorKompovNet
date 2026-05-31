@@ -4,9 +4,12 @@ public static class ModelLabels
 {
     public static string GetSessionDisplayKey(GameSession session)
     {
-        return session.Status == GameSessionStatus.Active && session.PlannedEndAt < DateTime.Now
-            ? "Overdue"
-            : session.Status.ToString();
+        if (session.Status == GameSessionStatus.Active && GameSessionTiming.IsPastPlannedEnd(session))
+        {
+            return "Overdue";
+        }
+
+        return session.Status.ToString();
     }
 
     public static bool IsSessionActive(GameSession session) =>
@@ -17,7 +20,7 @@ public static class ModelLabels
         return GetSessionDisplayKey(session) switch
         {
             "Active" => "Активна",
-            "Overdue" => "Просрочена",
+            "Overdue" => "Время на продление",
             "Completed" => "Завершена",
             _ => session.Status.ToString()
         };
@@ -50,6 +53,14 @@ public static class ModelLabels
     {
         return type == TransactionType.SessionStart || type == TransactionType.SessionExtension;
     }
+
+    public static bool CountsTowardRevenue(Transaction transaction) =>
+        transaction.Status == PaymentStatus.Paid
+        && transaction.Type != TransactionType.BonusAccrual
+        && transaction.PaymentType?.Code != PaymentTypeCodes.Balance;
+
+    public static string GetClientDisplayName(Client? client) =>
+        client is null ? "Гость (без аккаунта)" : $"{client.FirstName} {client.LastName}".Trim();
 
     public static string FormatTransactionAmount(Transaction transaction)
     {
