@@ -14,6 +14,7 @@ public sealed class KompovApiClient
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Converters =
         {
+            new JsonStringEnumConverter(),
             new UtcDateTimeJsonConverter(),
             new NullableUtcDateTimeJsonConverter()
         }
