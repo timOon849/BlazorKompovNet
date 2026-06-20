@@ -2,7 +2,7 @@
 
 public sealed class ApiOptions
 {
-    public string BaseUrl { get; set; } = "http://10.80.104.157:5232";
+    public string BaseUrl { get; set; } = "http://77.91.90.33:5232";
 
     public string AdminPanelPath { get; set; } = "api/admin-panel";
 

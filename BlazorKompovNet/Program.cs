@@ -25,7 +25,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.Configure<ApiOptions>(builder.Configuration.GetSection("Api"));
 
-var apiBaseUrl = builder.Configuration["Api:BaseUrl"] ?? "http://10.80.104.157:5232";
+var apiBaseUrl = builder.Configuration["Api:BaseUrl"] ?? "http://77.91.90.33:5232";
 builder.Services.AddHttpClient<KompovApiClient>((_, client) =>
 {
     client.Timeout = TimeSpan.FromSeconds(60);
