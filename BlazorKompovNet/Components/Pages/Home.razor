@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @rendermode InteractiveServer
 @attribute [Authorize]
 @inject IDashboardService DashboardService
@@ -153,6 +153,102 @@ else
         </div>
     </div>
 
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 mt-2">
+        <div>
+            <h2 class="h5 mb-1">Аналитика</h2>
+            <p class="text-muted small mb-0">Динамика выручки, сеансов и загрузки зала за выбранный период.</p>
+        </div>
+        <div class="btn-group analytics-period" role="group" aria-label="Период аналитики">
+            @foreach (var period in AnalyticsPeriods)
+            {
+                <button type="button"
+                        class="btn btn-sm @(analyticsDays == period.Days ? "btn-primary" : "btn-outline-primary")"
+                        @onclick="() => ChangeAnalyticsPeriodAsync(period.Days)">
+                    @period.Label
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (analytics is null)
+    {
+        <p class="text-muted"><em>Загрузка графиков...</em></p>
+    }
+    else
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-lg-7">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h3 class="h6 mb-1">Выручка по дням</h3>
+                        <p class="text-muted small mb-3">Сумма оплаченных операций за @analytics.Days @FormatDays(analytics.Days).</p>
+                        <DashboardChart ChartId="revenue-by-day"
+                                        Type="line"
+                                        Labels="@GetRevenueLabels()"
+                                        Datasets="@GetRevenueDatasets()"
+                                        Height="280px"/>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h3 class="h6 mb-1">Сеансы по дням</h3>
+                        <p class="text-muted small mb-3">Количество запущенных игровых сессий.</p>
+                        <DashboardChart ChartId="sessions-by-day"
+                                        Type="bar"
+                                        Labels="@GetSessionLabels()"
+                                        Datasets="@GetSessionDatasets()"
+                                        Height="280px"/>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h3 class="h6 mb-1">Состояние компьютеров</h3>
+                        <p class="text-muted small mb-3">Текущее распределение ПК по статусам.</p>
+                        @if (analytics.ComputerStatus.Count == 0)
+                        {
+                            <p class="text-muted mb-0">Нет данных о компьютерах.</p>
+                        }
+                        else
+                        {
+                            <DashboardChart ChartId="computer-status"
+                                            Type="doughnut"
+                                            Labels="@GetComputerStatusLabels()"
+                                            Datasets="@GetComputerStatusDatasets()"
+                                            Height="280px"/>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h3 class="h6 mb-1">Выручка по способам оплаты</h3>
+                        <p class="text-muted small mb-3">Структура оплат за @analytics.Days @FormatDays(analytics.Days).</p>
+                        @if (analytics.RevenueByPaymentType.Count == 0)
+                        {
+                            <p class="text-muted mb-0">За выбранный период оплат не было.</p>
+                        }
+                        else
+                        {
+                            <DashboardChart ChartId="revenue-by-payment"
+                                            Type="pie"
+                                            Labels="@GetPaymentTypeLabels()"
+                                            Datasets="@GetPaymentTypeDatasets()"
+                                            Height="280px"/>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     <div class="row g-3">
         <div class="col-lg-7">
             <div class="card h-100">
@@ -253,10 +349,39 @@ else
 
 @code {
     private DashboardStats? stats;
+    private DashboardAnalytics? analytics;
+    private int analyticsDays = 7;
     private string? notification;
     private decimal openingCashAmount;
     private decimal closingCashAmount;
     private decimal expectedCashAmount;
+
+    private static readonly (int Days, string Label)[] AnalyticsPeriods =
+    [
+        (7, "7 дней"),
+        (14, "14 дней"),
+        (30, "30 дней")
+    ];
+
+    private static readonly string[] ChartPalette =
+    [
+        "#f97316",
+        "#22c55e",
+        "#3b82f6",
+        "#f59e0b",
+        "#ef4444",
+        "#8b5cf6",
+        "#14b8a6"
+    ];
+
+    private static readonly string[] StatusPalette =
+    [
+        "#22c55e",
+        "#3b82f6",
+        "#f59e0b",
+        "#ef4444",
+        "#94a3b8"
+    ];
 
     protected override async Task OnInitializedAsync()
     {
@@ -269,6 +394,7 @@ else
         {
             var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
             stats = await DashboardService.GetDashboardStatsAsync(authenticationState.User);
+            analytics = await DashboardService.GetDashboardAnalyticsAsync(authenticationState.User, analyticsDays);
 
             if (stats.CurrentShift is not null)
             {
@@ -285,12 +411,111 @@ else
         catch (InvalidOperationException ex)
         {
             stats = new DashboardStats();
+            analytics = new DashboardAnalytics { Days = analyticsDays };
             notification = ex.Message;
         }
     }
 
+    private async Task ChangeAnalyticsPeriodAsync(int days)
+    {
+        if (analyticsDays == days)
+        {
+            return;
+        }
+
+        analyticsDays = days;
+        analytics = null;
+
+        try
+        {
+            var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            analytics = await DashboardService.GetDashboardAnalyticsAsync(authenticationState.User, analyticsDays);
+        }
+        catch (InvalidOperationException ex)
+        {
+            analytics = new DashboardAnalytics { Days = analyticsDays };
+            notification = ex.Message;
+        }
+    }
+
+    private string[] GetRevenueLabels() =>
+        analytics?.RevenueByDay.Select(point => point.Label).ToArray() ?? [];
+
+    private ChartDatasetConfig[] GetRevenueDatasets() =>
+    [
+        new ChartDatasetConfig
+        {
+            Label = "Выручка, ₽",
+            Data = analytics?.RevenueByDay.Select(point => (double)point.Amount).ToArray() ?? [],
+            BorderColor = "#f97316",
+            BackgroundColor = "rgba(249, 115, 22, 0.18)",
+            BorderWidth = 2,
+            Fill = true,
+            Tension = 0.35
+        }
+    ];
+
+    private string[] GetSessionLabels() =>
+        analytics?.SessionsByDay.Select(point => point.Label).ToArray() ?? [];
+
+    private ChartDatasetConfig[] GetSessionDatasets() =>
+    [
+        new ChartDatasetConfig
+        {
+            Label = "Сеансы",
+            Data = analytics?.SessionsByDay.Select(point => (double)point.Count).ToArray() ?? [],
+            BackgroundColor = "rgba(59, 130, 246, 0.75)",
+            BorderColor = "#3b82f6",
+            BorderWidth = 1
+        }
+    ];
+
+    private string[] GetComputerStatusLabels() =>
+        analytics?.ComputerStatus.Select(point => point.Name).ToArray() ?? [];
+
+    private ChartDatasetConfig[] GetComputerStatusDatasets() =>
+    [
+        new ChartDatasetConfig
+        {
+            Data = analytics?.ComputerStatus.Select(point => (double)point.Count).ToArray() ?? [],
+            BackgroundColor = StatusPalette.Take(analytics?.ComputerStatus.Count ?? 0).ToArray(),
+            BorderColor = "#ffffff",
+            BorderWidth = 2
+        }
+    ];
+
+    private string[] GetPaymentTypeLabels() =>
+        analytics?.RevenueByPaymentType.Select(point => point.Name).ToArray() ?? [];
+
+    private ChartDatasetConfig[] GetPaymentTypeDatasets() =>
+    [
+        new ChartDatasetConfig
+        {
+            Data = analytics?.RevenueByPaymentType.Select(point => (double)point.Amount).ToArray() ?? [],
+            BackgroundColor = ChartPalette.Take(analytics?.RevenueByPaymentType.Count ?? 0).ToArray(),
+            BorderColor = "#ffffff",
+            BorderWidth = 2
+        }
+    ];
+
+    private static string FormatDays(int days) =>
+        days switch
+        {
+            1 => "день",
+            var value when value % 10 == 1 && value % 100 != 11 => "день",
+            var value when value % 10 is >= 2 and <= 4 && (value % 100 < 10 || value % 100 >= 20) => "дня",
+            _ => "дней"
+        };
+
     private async Task OpenShiftAsync()
     {
+        var cashError = InputValidators.ShiftCashAmount(openingCashAmount);
+        if (cashError is not null)
+        {
+            notification = cashError;
+            return;
+        }
+
         var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var cashierId = GetCashierId(authenticationState.User);
         var result = await ClubManagementService.OpenShiftAsync(cashierId, openingCashAmount);
@@ -309,6 +534,13 @@ else
         if (stats?.CurrentShift is null)
         {
             notification = "Открытая смена не найдена.";
+            return;
+        }
+
+        var cashError = InputValidators.ShiftCashAmount(closingCashAmount);
+        if (cashError is not null)
+        {
+            notification = cashError;
             return;
         }
 

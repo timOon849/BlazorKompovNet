@@ -219,3 +219,31 @@ public sealed class ApiDashboardStats
     public decimal TopUpAmountToday { get; set; }
     public ApiCashierShift? CurrentShift { get; set; }
 }
+
+public sealed class ApiDashboardAnalytics
+{
+    public int Days { get; set; }
+    public List<ApiDailyMetricPoint> RevenueByDay { get; set; } = [];
+    public List<ApiDailyMetricPoint> SessionsByDay { get; set; } = [];
+    public List<ApiNamedAmountPoint> RevenueByPaymentType { get; set; } = [];
+    public List<ApiNamedCountPoint> ComputerStatus { get; set; } = [];
+}
+
+public sealed class ApiDailyMetricPoint
+{
+    public string Label { get; set; } = "";
+    public decimal Amount { get; set; }
+    public int Count { get; set; }
+}
+
+public sealed class ApiNamedAmountPoint
+{
+    public string Name { get; set; } = "";
+    public decimal Amount { get; set; }
+}
+
+public sealed class ApiNamedCountPoint
+{
+    public string Name { get; set; } = "";
+    public int Count { get; set; }
+}

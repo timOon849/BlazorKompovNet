@@ -80,6 +80,20 @@ a, .btn-link {
     z-index: 1;
 }
 
+.dashboard-chart {
+    position: relative;
+    width: 100%;
+}
+
+.dashboard-chart canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.analytics-period .btn {
+    min-width: 5.5rem;
+}
+
 .card-header {
     background: #fff7ef;
     border-bottom-color: rgba(120, 72, 36, 0.1);

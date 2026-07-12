@@ -1,4 +1,4 @@
-﻿namespace BlazorKompovNet.Services.Api;
+namespace BlazorKompovNet.Services.Api;
 
 public sealed class ApiOptions
 {

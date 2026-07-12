@@ -1,0 +1,82 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="dashboard-chart" style="height: @Height;">
+    <canvas @ref="canvasRef"></canvas>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string ChartId { get; set; } = default!;
+
+    [Parameter]
+    public string Type { get; set; } = "bar";
+
+    [Parameter]
+    public string[] Labels { get; set; } = [];
+
+    [Parameter]
+    public ChartDatasetConfig[] Datasets { get; set; } = [];
+
+    [Parameter]
+    public string Height { get; set; } = "260px";
+
+    [Parameter]
+    public bool BeginAtZero { get; set; } = true;
+
+    [Parameter]
+    public string LegendPosition { get; set; } = "bottom";
+
+    private ElementReference canvasRef;
+    private string[] _renderedLabels = [];
+    private ChartDatasetConfig[] _renderedDatasets = [];
+    private string _renderedType = "bar";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender && !HasChartChanged())
+        {
+            return;
+        }
+
+        _renderedLabels = Labels;
+        _renderedDatasets = Datasets;
+        _renderedType = Type;
+
+        await JS.InvokeVoidAsync("kompovDashboardCharts.render", canvasRef, new
+        {
+            id = ChartId,
+            type = Type,
+            labels = Labels,
+            datasets = Datasets.Select(dataset => new
+            {
+                label = dataset.Label,
+                data = dataset.Data,
+                backgroundColor = dataset.BackgroundColor,
+                borderColor = dataset.BorderColor,
+                borderWidth = dataset.BorderWidth,
+                fill = dataset.Fill,
+                tension = dataset.Tension
+            }),
+            beginAtZero = BeginAtZero,
+            legendPosition = LegendPosition
+        });
+    }
+
+    private bool HasChartChanged() =>
+        _renderedType != Type
+        || !_renderedLabels.SequenceEqual(Labels)
+        || _renderedDatasets.Length != Datasets.Length
+        || _renderedDatasets.Zip(Datasets).Any(pair => !pair.First.Equals(pair.Second));
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("kompovDashboardCharts.dispose", ChartId);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

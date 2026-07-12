@@ -1,4 +1,4 @@
-﻿namespace BlazorKompovNet.Models;
+namespace BlazorKompovNet.Models;
 public sealed class Client
 {
     public int Id { get; set; }

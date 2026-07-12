@@ -35,7 +35,18 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
     public async Task<IReadOnlyList<Tariff>> GetTariffsAsync()
     {
         var tariffs = await GetApiTariffsWithZonesAsync();
-        return tariffs.Where(tariff => tariff.IsActive).Select(ApiMapper.ToTariff).ToList();
+        return tariffs
+            .Where(tariff => tariff.IsActive)
+            .Select(ApiMapper.ToTariff)
+            .Select(tariff =>
+            {
+                tariff.TariffZones = tariff.TariffZones
+                    .Where(zone => zone.IsActive && zone.Price > 0)
+                    .ToList();
+                return tariff;
+            })
+            .Where(tariff => tariff.TariffZones.Count > 0)
+            .ToList();
     }
 
     public async Task<IReadOnlyList<Client>> GetClientsAsync()
@@ -201,10 +212,16 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
-            {
-                return ClubOperationResult.Failure("Укажите имя и фамилию гостя.");
-            }
+            var validationError = InputValidators.ClientRegistration(
+                firstName,
+                lastName,
+                phoneNumber,
+                email,
+                birthDate,
+                login,
+                password);
+            if (validationError is not null)
+                return ClubOperationResult.Failure(validationError);
 
             var existing = await GetClientsAsync();
             var normalizedPhone = string.IsNullOrWhiteSpace(phoneNumber) ? null : phoneNumber.Trim();
@@ -230,11 +247,6 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Клиент с таким логином уже зарегистрирован.");
             }
 
-            if (normalizedLogin is not null && string.IsNullOrWhiteSpace(normalizedPassword))
-            {
-                return ClubOperationResult.Failure("Укажите пароль для входа в мобильное приложение.");
-            }
-
             var model = new ApiClient
             {
                 FirstName = firstName.Trim(),
@@ -251,6 +263,77 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
 
             await api.PostAsync(api.Mobile("clients"), model);
             return ClubOperationResult.Success("Гость зарегистрирован.");
+        }
+        catch (Exception ex)
+        {
+            return ClubOperationResult.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ClubOperationResult> UpdateClientAsync(
+        int clientId,
+        string firstName,
+        string lastName,
+        string? phoneNumber,
+        string? email,
+        DateOnly? birthDate,
+        string login,
+        string? password)
+    {
+        try
+        {
+            var validationError = InputValidators.ClientUpdate(
+                firstName,
+                lastName,
+                phoneNumber,
+                email,
+                birthDate,
+                login,
+                password);
+            if (validationError is not null)
+                return ClubOperationResult.Failure(validationError);
+
+            var existing = await GetClientAsync(clientId);
+            if (existing is null)
+                return ClubOperationResult.Failure("Клиент не найден.");
+
+            var allClients = await GetClientsAsync();
+            var normalizedPhone = string.IsNullOrWhiteSpace(phoneNumber) ? null : phoneNumber.Trim();
+            var normalizedEmail = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
+            var normalizedLogin = login.Trim();
+
+            if (normalizedPhone is not null &&
+                allClients.Any(client => client.Id != clientId &&
+                    string.Equals(client.PhoneNumber, normalizedPhone, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ClubOperationResult.Failure("Клиент с таким телефоном уже зарегистрирован.");
+            }
+
+            if (normalizedEmail is not null &&
+                allClients.Any(client => client.Id != clientId &&
+                    string.Equals(client.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ClubOperationResult.Failure("Клиент с таким email уже зарегистрирован.");
+            }
+
+            if (allClients.Any(client => client.Id != clientId &&
+                string.Equals(client.Login, normalizedLogin, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ClubOperationResult.Failure("Клиент с таким логином уже зарегистрирован.");
+            }
+
+            var model = ApiMapper.ToApiClient(existing);
+            model.FirstName = firstName.Trim();
+            model.LastName = lastName.Trim();
+            model.PhoneNumber = normalizedPhone;
+            model.Email = normalizedEmail;
+            model.BirthDate = birthDate;
+            model.Login = normalizedLogin;
+            if (!string.IsNullOrWhiteSpace(password))
+                model.Password = password;
+
+            await api.PutAsync(api.Mobile($"clients/{clientId}"), model);
+            return ClubOperationResult.Success("Данные гостя обновлены.");
         }
         catch (Exception ex)
         {
@@ -279,6 +362,10 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Сумма в кассе не может быть отрицательной.");
             }
 
+            var cashError = InputValidators.CashAmount(openingCashAmount);
+            if (cashError is not null)
+                return ClubOperationResult.Failure(cashError);
+
             var shift = new ApiCashierShift
             {
                 ClubId = clubId!.Value,
@@ -305,6 +392,10 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             {
                 return ClubOperationResult.Failure("Сумма в кассе не может быть отрицательной.");
             }
+
+            var cashError = InputValidators.CashAmount(closingCashAmount);
+            if (cashError is not null)
+                return ClubOperationResult.Failure(cashError);
 
             var shift = await api.GetAsync<ApiCashierShift>(api.Admin($"cashier-shifts/{shiftId}"));
             if (shift is null)
@@ -362,6 +453,10 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Укажите положительную сумму пополнения.");
             }
 
+            var topUpError = InputValidators.TopUpAmount(amount);
+            if (topUpError is not null)
+                return ClubOperationResult.Failure(topUpError);
+
             var updated = await api.PostAsync<ApiClient>(
                 api.Admin($"clients/{clientId}/balance-top-up"),
                 new
@@ -416,6 +511,10 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
                 return ClubOperationResult.Failure("Окончание брони должно быть позже начала.");
             }
 
+            var bookingError = InputValidators.Booking(startsAt, endsAt);
+            if (bookingError is not null)
+                return ClubOperationResult.Failure(bookingError);
+
             var startsUtc = ClubTimeZone.ToUtc(startsAt);
             var endsUtc = ClubTimeZone.ToUtc(endsAt);
 
@@ -451,7 +550,7 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
 
             await api.PostAsync(api.Crm("bookings"), booking);
 
-            if (status == BookingStatus.Active && computer.Status?.Code == ComputerStatusCodes.Available)
+            if (computer.Status?.Code == ComputerStatusCodes.Available)
             {
                 await SetComputerStatusAsync(computerId, ComputerStatusCodes.Reserved);
             }
@@ -543,6 +642,11 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             var totalPrice = tariff.IsHourly
                 ? tariffZone.Price * billedHours
                 : tariffZone.Price;
+
+            if (totalPrice <= 0)
+            {
+                return ClubOperationResult.Failure("Выбранный тариф недоступен для запуска сеанса.");
+            }
 
             var upcomingBooking = GetUpcomingBooking(bookings, computerId);
             var plannedEndAt = DateTime.UtcNow.Add(duration);
@@ -721,6 +825,11 @@ public sealed class ApiClubManagementService(KompovApiClient api, ICashierReposi
             var price = tariff.IsHourly
                 ? tariffZone.Price * billedHours
                 : tariffZone.Price;
+
+            if (price <= 0)
+            {
+                return ClubOperationResult.Failure("Выбранный тариф недоступен для продления сеанса.");
+            }
 
             if (client.Balance < price)
             {

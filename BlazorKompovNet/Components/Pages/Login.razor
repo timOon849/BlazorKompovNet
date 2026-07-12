@@ -1,4 +1,4 @@
-﻿@page "/login"
+@page "/login"
 @attribute [AllowAnonymous]
 
 <PageTitle>Вход кассира</PageTitle>
@@ -45,7 +45,13 @@
                 {
                     <div class="alert alert-danger" role="alert">
                         API недоступен. Запустите KompovNetApi и проверьте в appsettings.json адрес
-                        <code>http://127.0.0.1:5232</code>.
+                        <code>http://localhost:5232</code>
+                    </div>
+                }
+                @if (Error == "3")
+                {
+                    <div class="alert alert-danger" role="alert">
+                        Введите логин и пароль.
                     </div>
                 }
 

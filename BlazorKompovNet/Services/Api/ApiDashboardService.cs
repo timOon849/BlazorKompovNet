@@ -62,4 +62,56 @@ public sealed class ApiDashboardService(KompovApiClient api) : IDashboardService
                 : ApiMapper.ToShift(stats.CurrentShift, currentClub)
         };
     }
+
+    public async Task<DashboardAnalytics> GetDashboardAnalyticsAsync(ClaimsPrincipal user, int days = 7)
+    {
+        days = Math.Clamp(days, 1, 30);
+
+        var stats = await api.GetAsync<ApiDashboardStats>(api.Admin("dashboard"));
+        var clubId = stats?.CurrentClub?.Id;
+        var path = clubId is int id
+            ? $"dashboard/analytics?clubId={id}&days={days}"
+            : $"dashboard/analytics?days={days}";
+
+        var analytics = await api.GetAsync<ApiDashboardAnalytics>(api.Admin(path));
+        if (analytics is null)
+        {
+            return new DashboardAnalytics { Days = days };
+        }
+
+        return new DashboardAnalytics
+        {
+            Days = analytics.Days,
+            RevenueByDay = analytics.RevenueByDay
+                .Select(point => new DailyMetricPoint
+                {
+                    Label = point.Label,
+                    Amount = point.Amount,
+                    Count = point.Count
+                })
+                .ToList(),
+            SessionsByDay = analytics.SessionsByDay
+                .Select(point => new DailyMetricPoint
+                {
+                    Label = point.Label,
+                    Amount = point.Amount,
+                    Count = point.Count
+                })
+                .ToList(),
+            RevenueByPaymentType = analytics.RevenueByPaymentType
+                .Select(point => new NamedAmountPoint
+                {
+                    Name = point.Name,
+                    Amount = point.Amount
+                })
+                .ToList(),
+            ComputerStatus = analytics.ComputerStatus
+                .Select(point => new NamedCountPoint
+                {
+                    Name = point.Name,
+                    Count = point.Count
+                })
+                .ToList()
+        };
+    }
 }

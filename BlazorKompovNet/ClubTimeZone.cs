@@ -1,6 +1,5 @@
 namespace BlazorKompovNet;
 
-/// <summary>Часовой пояс клуба: GMT+3 (как в API).</summary>
 public static class ClubTimeZone
 {
     private static readonly TimeSpan Offset = TimeSpan.FromHours(3);

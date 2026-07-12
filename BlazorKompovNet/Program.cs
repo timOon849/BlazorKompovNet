@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using BlazorKompovNet.Components;
 using BlazorKompovNet.Services;
 using BlazorKompovNet.Services.Api;
@@ -71,6 +71,12 @@ app.MapPost("/auth/login", async (HttpContext httpContext, ICashierRepository ca
     var userName = form["userName"].ToString();
     var password = form["password"].ToString();
 
+    var authError = InputValidators.AuthCredentials(userName, password);
+    if (authError is not null)
+    {
+        return Results.Redirect("/login?error=3");
+    }
+
     try
     {
         var cashier = await cashiers.ValidateCredentialsAsync(userName, password);
@@ -98,7 +104,6 @@ app.MapPost("/auth/login", async (HttpContext httpContext, ICashierRepository ca
         }
         catch (InvalidOperationException)
         {
-            // Вход уже выполнен; обновление lastLogin не должно блокировать авторизацию.
         }
 
         return Results.Redirect("/");

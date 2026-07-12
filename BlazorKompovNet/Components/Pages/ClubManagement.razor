@@ -139,28 +139,29 @@
                                 {
                                     var session = GetActiveSession(computer.Id);
                                     var booking = GetDisplayableBooking(computer.Id);
+                                    var effectiveStatus = GetEffectiveStatus(computer, session, booking);
 
-                                    <tr class="@GetComputerRowClass(computer, session)"
+                                    <tr class="@GetComputerRowClass(effectiveStatus, session)"
                                         style="cursor: context-menu;"
                                         title="Нажмите правой кнопкой мыши для действий"
                                         @oncontextmenu="(args) => OpenComputerMenu(args, computer)"
                                         @oncontextmenu:preventDefault="true">
                                         <td>
                                             <div class="d-flex align-items-center gap-3">
-                                                <span class="pc-status-indicator @GetComputerIndicatorClass(computer, session)" aria-hidden="true"></span>
+                                                <span class="pc-status-indicator @GetComputerIndicatorClass(effectiveStatus, session)" aria-hidden="true"></span>
                                                 <div>
                                                     <strong>@ComputerDisplay.GetTitle(computer)</strong>
                                                     <div class="text-muted small">@ComputerDisplay.GetSubtitle(computer)</div>
-                                                    <div class="small @GetComputerStateTextClass(computer, session, booking)">
-                                                        @GetComputerStateText(computer, session, booking)
+                                                    <div class="small @GetComputerStateTextClass(effectiveStatus, session, booking)">
+                                                        @GetComputerStateText(effectiveStatus, session, booking)
                                                     </div>
                                                 </div>
                                             </div>
                                         </td>
                                         <td>
                                             <div class="d-flex flex-column gap-1">
-                                                <span><span class="badge @GetStatusBadgeClass(computer.Status)">@GetStatusText(computer.Status)</span></span>
-                                                <span class="small text-muted">@GetComputerActionHint(computer, session, booking)</span>
+                                                <span><span class="badge @GetStatusBadgeClass(effectiveStatus)">@GetStatusText(effectiveStatus)</span></span>
+                                                <span class="small text-muted">@GetComputerActionHint(effectiveStatus, session, booking)</span>
                                             </div>
                                         </td>
                                         <td>
@@ -208,8 +209,12 @@
 
 @if (showComputerMenu && contextMenuComputer is not null)
 {
+    <div class="position-fixed top-0 start-0 w-100 h-100"
+         style="z-index: 1040; background: transparent;"
+         @onclick="CloseComputerMenu"></div>
     <div class="list-group shadow"
-         style="position: fixed; left: @(contextMenuX)px; top: @(contextMenuY)px; z-index: 1050; min-width: 220px;">
+         style="position: fixed; left: min(@(contextMenuX.ToString(System.Globalization.CultureInfo.InvariantCulture))px, calc(100vw - 230px)); top: min(@(contextMenuY.ToString(System.Globalization.CultureInfo.InvariantCulture))px, calc(100vh - 360px)); z-index: 1051; min-width: 220px; max-height: calc(100vh - 16px); overflow-y: auto;"
+         @onclick:stopPropagation="true">
         <button class="list-group-item list-group-item-action"
                 type="button"
                 disabled="@(!CanStartSession(contextMenuComputer))"
@@ -359,7 +364,7 @@
                         <div class="col-md-6">
                             <label class="form-label" for="sessionTariff">Тариф</label>
                             <select class="form-select" id="sessionTariff" @bind="selectedTariffId">
-                                @foreach (var tariff in tariffs)
+                                @foreach (var tariff in TariffsForSelectedComputer)
                                 {
                                     <option value="@tariff.Id">@tariff.Name - @FormatMoney(GetTariffPrice(tariff, selectedComputer.ZoneId))</option>
                                 }
@@ -498,7 +503,7 @@
                         <div class="col-md-6">
                             <label class="form-label" for="extendTariff">Тариф</label>
                             <select class="form-select" id="extendTariff" @bind="extendTariffId">
-                                @foreach (var tariff in tariffs)
+                                @foreach (var tariff in TariffsForSelectedSession)
                                 {
                                     <option value="@tariff.Id">@tariff.Name - @FormatMoney(GetTariffPrice(tariff, selectedSession.Computer?.ZoneId ?? 0))</option>
                                 }
@@ -648,6 +653,14 @@
 
     private Tariff? SelectedTariff => tariffs.FirstOrDefault(tariff => tariff.Id == selectedTariffId);
     private Tariff? SelectedExtendTariff => tariffs.FirstOrDefault(tariff => tariff.Id == extendTariffId);
+    private IEnumerable<Tariff> TariffsForSelectedComputer =>
+        selectedComputer is null
+            ? tariffs
+            : tariffs.Where(tariff => GetTariffPrice(tariff, selectedComputer.ZoneId) > 0);
+    private IEnumerable<Tariff> TariffsForSelectedSession =>
+        selectedSession?.Computer is null
+            ? tariffs
+            : tariffs.Where(tariff => GetTariffPrice(tariff, selectedSession.Computer.ZoneId) > 0);
     private Client? SelectedClient => sessionSearchClients.FirstOrDefault(client => client.Id == selectedClientId);
     private Client? SelectedSessionClient => selectedSession?.Client;
     private IEnumerable<PaymentType> GuestPaymentTypes => paymentTypes.Where(type =>
@@ -725,7 +738,6 @@
         }
         catch
         {
-            // Фоновое обновление не должно ломать страницу.
         }
     }
 
@@ -787,6 +799,13 @@
             return;
         }
 
+        var topUpError = InputValidators.TopUpAmount(topUpAmount);
+        if (topUpError is not null)
+        {
+            notification = topUpError;
+            return;
+        }
+
         var result = await ClubManagementService.TopUpClientBalanceAsync(selectedTopUpClientId, topUpAmount, selectedPaymentTypeId);
         notification = result.Succeeded
             ? $"Баланс посетителя пополнен. Тип: {paymentTypes.FirstOrDefault(paymentType => paymentType.Id == selectedPaymentTypeId)?.Name}."
@@ -814,7 +833,7 @@
         sessionSearchText = null;
         sessionSearchClients = [];
         selectedClientId = GetUpcomingBooking(selectedComputer.Id)?.ClientId ?? 0;
-        selectedTariffId = tariffs.FirstOrDefault()?.Id ?? 0;
+        selectedTariffId = TariffsForSelectedComputer.FirstOrDefault()?.Id ?? 0;
         sessionHours = 1;
         selectedGuestPaymentTypeId = GuestPaymentTypes.FirstOrDefault()?.Id ?? 0;
 
@@ -878,7 +897,7 @@
         }
 
         selectedSession = GetActiveSession(computer.Id);
-        extendTariffId = tariffs.FirstOrDefault()?.Id ?? 0;
+        extendTariffId = TariffsForSelectedSession.FirstOrDefault()?.Id ?? 0;
         extendHours = 1;
         showExtendSessionDialog = selectedSession is not null;
     }
@@ -1119,8 +1138,33 @@
     private int CountComputers(string statusCode)
     {
         return zones.SelectMany(zone => zone.Computers)
-            .Count(computer => computer.Status?.Code == statusCode);
+            .Count(computer =>
+            {
+                var session = GetActiveSession(computer.Id);
+                var booking = GetDisplayableBooking(computer.Id);
+                return GetEffectiveStatus(computer, session, booking)?.Code == statusCode;
+            });
     }
+
+    private ComputerStatus? GetEffectiveStatus(Computer computer, GameSession? session, Booking? booking)
+    {
+        if (session is not null)
+            return computer.Status;
+
+        if (booking is not null &&
+            BookingSessionPolicy.IsRelevantStatus(booking.Status) &&
+            computer.Status?.Code is ComputerStatusCodes.Available or ComputerStatusCodes.Reserved)
+        {
+            return FindStatusByCode(ComputerStatusCodes.Reserved) ?? computer.Status;
+        }
+
+        return computer.Status;
+    }
+
+    private ComputerStatus? FindStatusByCode(string code) =>
+        zones.SelectMany(zone => zone.Computers)
+            .Select(computer => computer.Status)
+            .FirstOrDefault(status => status?.Code == code);
 
     private bool CanStartSession(Computer computer)
     {
@@ -1189,11 +1233,11 @@
         };
     }
 
-    private static string GetComputerRowClass(Computer computer, GameSession? session)
+    private static string GetComputerRowClass(ComputerStatus? status, GameSession? session)
     {
         return session is not null && GameSessionTiming.IsPastPlannedEnd(session)
             ? "computer-row row-overdue"
-            : computer.Status?.Code switch
+            : status?.Code switch
             {
                 ComputerStatusCodes.Available => "computer-row row-available",
                 ComputerStatusCodes.Busy => "computer-row row-busy",
@@ -1204,11 +1248,11 @@
             };
     }
 
-    private static string GetComputerIndicatorClass(Computer computer, GameSession? session)
+    private static string GetComputerIndicatorClass(ComputerStatus? status, GameSession? session)
     {
         return session is not null && GameSessionTiming.IsPastPlannedEnd(session)
             ? "indicator-overdue"
-            : computer.Status?.Code switch
+            : status?.Code switch
             {
                 ComputerStatusCodes.Available => "indicator-available",
                 ComputerStatusCodes.Busy => "indicator-busy",
@@ -1219,7 +1263,7 @@
             };
     }
 
-    private string GetComputerStateText(Computer computer, GameSession? session, Booking? booking)
+    private string GetComputerStateText(ComputerStatus? status, GameSession? session, Booking? booking)
     {
         if (session is not null)
         {
@@ -1237,9 +1281,9 @@
         }
 
         if (booking is not null)
-            return $"Забронирован на {ClubDateTime.Format(booking.StartsAt)}";
+            return $"Забронирован · {GetClientName(booking.Client)}, {ClubDateTime.Format(booking.StartsAt)}";
 
-        return computer.Status?.Code switch
+        return status?.Code switch
         {
             ComputerStatusCodes.Available => "Готов к запуску",
             ComputerStatusCodes.Reserved => "Зарезервирован",
@@ -1249,13 +1293,13 @@
         };
     }
 
-    private static string GetComputerStateTextClass(Computer computer, GameSession? session, Booking? booking)
+    private static string GetComputerStateTextClass(ComputerStatus? status, GameSession? session, Booking? booking)
     {
         return session is not null && GameSessionTiming.IsPastPlannedEnd(session)
             ? "text-danger fw-semibold"
             : booking is not null
                 ? "text-warning-emphasis"
-                : computer.Status?.Code switch
+                : status?.Code switch
                 {
                     ComputerStatusCodes.Available => "text-success",
                     ComputerStatusCodes.Busy => "text-primary",
@@ -1266,7 +1310,7 @@
                 };
     }
 
-    private string GetComputerActionHint(Computer computer, GameSession? session, Booking? booking)
+    private static string GetComputerActionHint(ComputerStatus? status, GameSession? session, Booking? booking)
     {
         if (session is not null)
         {
@@ -1282,7 +1326,7 @@
             return "За час до брони — только клиент брони; раньше — сеанс до −30 мин от начала брони";
         }
 
-        return computer.Status?.Code switch
+        return status?.Code switch
         {
             ComputerStatusCodes.Available => "Правая кнопка: начать сессию",
             ComputerStatusCodes.Reserved => "Можно начать сессию по брони",

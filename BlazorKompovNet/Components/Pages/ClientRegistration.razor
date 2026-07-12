@@ -54,18 +54,17 @@
 
                 <hr class="my-4" />
 
-                <h2 class="h6 mb-3 text-muted">Доступ в мобильное приложение</h2>
-                <p class="small text-muted">Логин и пароль можно оставить пустыми для гостя без мобильного аккаунта.</p>
+                <h2 class="h6 mb-3 text-muted">Доступ в мобильное приложение и Shell</h2>
+                <p class="small text-muted">Логин и пароль обязательны — без них гость не сможет войти в мобилку и Shell-клиент.</p>
 
                 <div class="mb-3">
-                    <label class="form-label" for="login">Логин</label>
-                    <input class="form-control" id="login" @bind="login" autocomplete="off" />
-                    <div class="form-text">Если указан — потребуется пароль для входа в мобильное приложение.</div>
+                    <label class="form-label" for="login">Логин <span class="text-danger">*</span></label>
+                    <input class="form-control" id="login" @bind="login" autocomplete="off" required />
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label" for="password">Пароль</label>
-                    <input class="form-control" id="password" type="password" @bind="password" autocomplete="new-password" />
+                    <label class="form-label" for="password">Пароль <span class="text-danger">*</span></label>
+                    <input class="form-control" id="password" type="password" @bind="password" autocomplete="new-password" required />
                 </div>
 
                 <button class="btn btn-primary" type="button" disabled="@isSubmitting" @onclick="RegisterClientAsync">
@@ -97,9 +96,17 @@
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(login) && string.IsNullOrWhiteSpace(password))
+        var validationError = InputValidators.ClientRegistration(
+            firstName,
+            lastName,
+            phoneNumber,
+            email,
+            birthDate.HasValue ? DateOnly.FromDateTime(birthDate.Value) : null,
+            login,
+            password);
+        if (validationError is not null)
         {
-            notification = "Укажите пароль для выбранного логина.";
+            notification = validationError;
             notificationClass = "alert-warning";
             return;
         }

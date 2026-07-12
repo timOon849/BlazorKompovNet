@@ -112,7 +112,6 @@ public sealed class KompovRealtimeHubClient : IAsyncDisposable
             }
             catch
             {
-                // try next hub method name
             }
         }
     }

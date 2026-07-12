@@ -27,10 +27,19 @@ else
         </div>
 
         <div class="d-flex gap-2">
+            @if (!isEditing)
+            {
+                <button class="btn btn-outline-primary" type="button" @onclick="BeginEdit">Редактировать</button>
+            }
             <a class="btn btn-outline-primary" href="/bookings">Создать бронь</a>
             <a class="btn btn-outline-secondary" href="/clients">К списку</a>
         </div>
     </div>
+
+    @if (!string.IsNullOrWhiteSpace(notification))
+    {
+        <div class="alert @notificationClass">@notification</div>
+    }
 
     <div class="row g-3 mb-4">
         <div class="col-lg-5">
@@ -38,7 +47,47 @@ else
                 <div class="card-body">
                     <h2 class="h5 mb-3">Данные клиента</h2>
 
-                    <dl class="row mb-0">
+                    @if (isEditing)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label" for="editFirstName">Имя <span class="text-danger">*</span></label>
+                            <input class="form-control" id="editFirstName" @bind="editFirstName" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="editLastName">Фамилия <span class="text-danger">*</span></label>
+                            <input class="form-control" id="editLastName" @bind="editLastName" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="editPhone">Телефон</label>
+                            <input class="form-control" id="editPhone" @bind="editPhoneNumber" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="editBirthDate">Дата рождения</label>
+                            <InputDate class="form-control" id="editBirthDate" @bind-Value="editBirthDate" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="editEmail">Email</label>
+                            <input class="form-control" id="editEmail" type="email" @bind="editEmail" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="editLogin">Логин <span class="text-danger">*</span></label>
+                            <input class="form-control" id="editLogin" @bind="editLogin" autocomplete="off" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="editPassword">Новый пароль</label>
+                            <input class="form-control" id="editPassword" type="password" @bind="editPassword" autocomplete="new-password" />
+                            <div class="form-text">Оставьте пустым, чтобы не менять текущий пароль.</div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary" type="button" disabled="@isSaving" @onclick="SaveClientAsync">
+                                @(isSaving ? "Сохранение..." : "Сохранить")
+                            </button>
+                            <button class="btn btn-outline-secondary" type="button" disabled="@isSaving" @onclick="CancelEdit">Отмена</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <dl class="row mb-0">
                         <dt class="col-sm-4">Баланс</dt>
                         <dd class="col-sm-8"><strong>@FormatMoney(client.Balance)</strong></dd>
 
@@ -81,7 +130,8 @@ else
 
                         <dt class="col-sm-4">Пополнения</dt>
                         <dd class="col-sm-8">@FormatMoney(ClientTransactions.Where(t => !ModelLabels.IsSessionCharge(t.Type)).Sum(t => t.Amount))</dd>
-                    </dl>
+                        </dl>
+                    }
                 </div>
             </div>
         </div>
@@ -226,6 +276,19 @@ else
     private IReadOnlyList<Transaction> transactions = [];
     private IReadOnlyList<Booking> bookings = [];
 
+    private bool isEditing;
+    private bool isSaving;
+    private string? notification;
+    private string notificationClass = "alert-info";
+
+    private string editFirstName = string.Empty;
+    private string editLastName = string.Empty;
+    private string? editPhoneNumber;
+    private DateTime? editBirthDate;
+    private string? editEmail;
+    private string editLogin = string.Empty;
+    private string? editPassword;
+
     private IEnumerable<GameSession> ClientSessions => sessions
         .Where(session => session.ClientId == Id)
         .OrderByDescending(session => session.StartedAt);
@@ -269,6 +332,72 @@ else
         sessions = await ClubManagementService.GetSessionsAsync();
         transactions = await ClubManagementService.GetTransactionsAsync();
         bookings = await ClubManagementService.GetBookingsAsync();
+    }
+
+    private void BeginEdit()
+    {
+        if (client is null)
+            return;
+
+        editFirstName = client.FirstName;
+        editLastName = client.LastName;
+        editPhoneNumber = client.PhoneNumber;
+        editBirthDate = client.BirthDate?.ToDateTime(TimeOnly.MinValue);
+        editEmail = client.Email;
+        editLogin = client.Login ?? string.Empty;
+        editPassword = null;
+        notification = null;
+        isEditing = true;
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+        editPassword = null;
+        notification = null;
+    }
+
+    private async Task SaveClientAsync()
+    {
+        if (client is null)
+            return;
+
+        var validationError = InputValidators.ClientUpdate(
+            editFirstName,
+            editLastName,
+            editPhoneNumber,
+            editEmail,
+            editBirthDate.HasValue ? DateOnly.FromDateTime(editBirthDate.Value) : null,
+            editLogin,
+            editPassword);
+        if (validationError is not null)
+        {
+            notification = validationError;
+            notificationClass = "alert-warning";
+            return;
+        }
+
+        isSaving = true;
+        var result = await ClubManagementService.UpdateClientAsync(
+            client.Id,
+            editFirstName,
+            editLastName,
+            editPhoneNumber,
+            editEmail,
+            editBirthDate.HasValue ? DateOnly.FromDateTime(editBirthDate.Value) : null,
+            editLogin,
+            editPassword);
+        isSaving = false;
+
+        notification = result.Message;
+        notificationClass = result.Succeeded ? "alert-success" : "alert-danger";
+
+        if (!result.Succeeded)
+            return;
+
+        isEditing = false;
+        editPassword = null;
+        await ReloadAsync();
     }
 
     public void Dispose()

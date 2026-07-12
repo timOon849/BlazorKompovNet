@@ -1,4 +1,4 @@
-﻿using System.Net.Http.Json;
+using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.Json.Serialization;

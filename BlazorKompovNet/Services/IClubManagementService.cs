@@ -47,6 +47,16 @@ public interface IClubManagementService
         string? login = null,
         string? password = null);
 
+    Task<ClubOperationResult> UpdateClientAsync(
+        int clientId,
+        string firstName,
+        string lastName,
+        string? phoneNumber,
+        string? email,
+        DateOnly? birthDate,
+        string login,
+        string? password);
+
     Task<ClubOperationResult> OpenShiftAsync(int cashierId, decimal openingCashAmount);
 
     Task<ClubOperationResult> CloseShiftAsync(int shiftId, decimal closingCashAmount);
